@@ -2,8 +2,11 @@ import AppKit
 import QuartzCore
 
 // Drops a black pixel-art fight from under the MacBook notch. Click it to retract and quit.
+// It only becomes the key window if one of its views needs the keyboard (none does: becomesKeyOnlyIfNeeded),
+// so whatever you're typing in keeps the keyboard when it drops in; clicks still reach it.
 final class NotchPanel: NSPanel {
     override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
     override func constrainFrameRect(_ r: NSRect, to s: NSScreen?) -> NSRect { r }
 }
 
@@ -95,6 +98,7 @@ final class App: NSObject, NSApplicationDelegate {
         win.isOpaque = false
         win.hasShadow = false
         win.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
+        win.becomesKeyOnlyIfNeeded = true                            // never takes the keyboard from what you're typing in
 
         let v = ClickView(frame: NSRect(origin: .zero, size: win.frame.size))
         // Config "click": "close" (default) closes on a click; "next" skips to the next clip, a double click closes.
