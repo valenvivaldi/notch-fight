@@ -2,7 +2,8 @@ import AppKit
 
 // Notch Fight's menu bar icon (`nf menu on`): pause / resume, preview a theme, and the settings, without
 // a terminal. Every action runs `nf` (scripts/nf.py next to the build), which stays the one place that
-// knows how; the menu is rebuilt each time it opens, so it always shows the current state.
+// knows how; the menu is rebuilt each time it opens, so it always shows the current state. Only the
+// gate, asked every 15 s and on every open, runs in-process (Gate.swift) instead of through Python.
 final class Menu: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var item: NSStatusItem!
     let root = Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent()
@@ -25,22 +26,18 @@ final class Menu: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return (p.terminationStatus, String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")
     }
 
-    var config: [String: Any] {
-        let url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".config/notch-fight/config.json")
-        guard let d = try? Data(contentsOf: url), let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return [:] }
-        return j
-    }
+    var config: [String: Any] { Gate.loadConfig() }
 
     // The icon: a sparkle when the panel may show, a pause sign when it is hidden (paused, quiet, sharing).
     func refreshIcon() {
         DispatchQueue.global(qos: .utility).async {
-            let (code, why) = self.run(["gate"])
+            let (ok, why) = Gate.check()
             DispatchQueue.main.async {
-                let name = code == 0 ? "sparkle" : "pause.circle"
+                let name = ok ? "sparkle" : "pause.circle"
                 let img = NSImage(systemSymbolName: name, accessibilityDescription: "Notch Fight")
                 img?.isTemplate = true
                 self.item.button?.image = img
-                self.item.button?.toolTip = code == 0 ? "Notch Fight" : "Notch Fight: \(why)"
+                self.item.button?.toolTip = ok ? "Notch Fight" : "Notch Fight: \(why)"
             }
         }
     }
@@ -48,8 +45,8 @@ final class Menu: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         let cfg = config
-        let (code, why) = run(["gate"])
-        add(menu, code == 0 ? "Notch Fight: on" : "Notch Fight: \(why)", nil)
+        let (ok, why) = Gate.check()
+        add(menu, ok ? "Notch Fight: on" : "Notch Fight: \(why)", nil)
 
         let pause = NSMenu()
         for (label, arg) in [("15 minutes", "15m"), ("30 minutes", "30m"), ("1 hour", "1h"), ("4 hours", "4h"),
@@ -57,8 +54,7 @@ final class Menu: NSObject, NSApplicationDelegate, NSMenuDelegate {
             add(pause, label, #selector(act(_:)), ["pause", arg])
         }
         sub(menu, "Pause", pause)
-        let paused = FileManager.default.fileExists(atPath: FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".config/notch-fight/paused").path)
+        let paused = FileManager.default.fileExists(atPath: Gate.pausedURL.path)
         add(menu, "Resume", paused ? #selector(act(_:)) : nil, ["resume"])
         menu.addItem(.separator())
 
@@ -128,8 +124,13 @@ final class Menu: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 }
 
-let app = NSApplication.shared
-let m = Menu()
-app.delegate = m
-app.setActivationPolicy(.accessory)
-app.run()
+// Built together with Gate.swift (-parse-as-library), so the entry point is explicit.
+@main enum MenuMain {
+    static let menu = Menu()
+    static func main() {
+        let app = NSApplication.shared
+        app.delegate = menu
+        app.setActivationPolicy(.accessory)
+        app.run()
+    }
+}

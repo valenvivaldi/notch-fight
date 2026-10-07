@@ -193,10 +193,16 @@ nf click next               # a click skips to the next clip, a double click clo
 nf menu on                  # a menu bar icon with all of the above (and "Choose clips…"); starts at login; `off`
 ```
 
-Whether the panel may show is decided in one place, `nf gate` (`scripts/nf.py`): the Claude Code hook
+Whether the panel may show follows one set of rules, `nf gate` (`scripts/nf.py`): the Claude Code hook
 asks before opening it, and the app asks every few seconds while it is up, so a pause, quiet hours or a
 screen share hides a panel that is already out. Sessions keep being tracked meanwhile. The pause lives
-in `~/.config/notch-fight/paused`; quiet hours and `pauseOnShare` in `config.json`.
+in `~/.config/notch-fight/paused`; quiet hours and `pauseOnShare` in `config.json`. The app and the menu
+ask their own copy of those rules (`app/Gate.swift`, no Python every few seconds); `tests/test_app_gate.py`
+keeps it answering exactly like `nf gate`.
+
+The rotation outlives the app: `~/.config/notch-fight/state.json` keeps the clips already played this
+round, so the next launch carries on with it instead of starting over, and no clip repeats until all have
+played. It also counts plays per clip and the time the panel was up each day.
 
 With a delay, the hook hands the prompt to a detached sleeper and returns at once: after the delay, the
 panel shows only if that session is still working (its marker is still there). The menu bar icon is a
@@ -327,6 +333,9 @@ src/
 ├── build.py           # entry point used by build.sh
 └── legacy/single_clip.py   # the original standalone 10 s clip (--black for the notch version)
 app/main.swift, app/Info.plist   # the notch app
+app/Gate.swift                   # may the panel show (pause, quiet hours, sharing): app + menu, like `nf gate`
+app/State.swift                  # state.json: the rotation's round across launches, play counts
+app/menu.swift                   # the menu bar icon (nf menu on)
 mod/                             # the Claude Code mod (band above the prompt)
 media/                           # rendered previews
 ```

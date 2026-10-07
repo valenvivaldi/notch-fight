@@ -24,11 +24,13 @@ final class App: NSObject, NSApplicationDelegate {
     var cache: [String: [CGImage]] = [:]            // "c:<clip>" / "t:<transition>" -> frames
     var cacheOrder: [String] = []                   // oldest first: the cache keeps the last `cacheSize`
     let cacheSize = 6
-    var queue: [[CGImage]] = []
+    var queue: [(name: String?, frames: [CGImage])] = []   // name: a clip (nil: a transition half)
     var theme = ""
-    // Per-launch shuffle bag: forced clips first, then every other clip in random order;
-    // no clip repeats until all have played, then a new round starts.
+    // Shuffle bag: forced clips first, then every other clip in random order; no clip repeats until all
+    // have played, then a new round starts. The round outlives the app: state.json keeps what has played.
     var remaining: [String] = []
+    lazy var state = State()
+    var shownSince = Date()                            // visible time not yet added to the stats
     var lastPlayed = ""
     var visitCount = 0                                 // clips played in the current theme visit
     let maxPerVisit = 2
@@ -51,14 +53,7 @@ final class App: NSObject, NSApplicationDelegate {
     // ~/.config/notch-fight/config.json, read once. Keys: "first", "fillet", "stretch", "scale", "widthTweak",
     // "newClips"/"enabled"/"disabled" (which clips play; see activeClips). NOTCH_FIGHT_CONFIG overrides the
     // path (tests/dev: only seen when the binary is run directly, `open` does not pass the environment).
-    static let config: [String: Any] = {
-        let env = ProcessInfo.processInfo.environment["NOTCH_FIGHT_CONFIG"] ?? ""
-        let url = env.isEmpty ? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".config/notch-fight/config.json")
-                              : URL(fileURLWithPath: env)
-        guard let data = try? Data(contentsOf: url),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [:] }
-        return json
-    }()
+    static let config: [String: Any] = Gate.loadConfig()
     static func cfgNumber(_ key: String) -> Double? { (config[key] as? NSNumber)?.doubleValue }
     let shape = CAShapeLayer()
     var root: CALayer!
@@ -84,7 +79,7 @@ final class App: NSObject, NSApplicationDelegate {
             notchH = screen.safeAreaInsets.top
             notchW += CGFloat(Self.cfgNumber("widthTweak") ?? Double(Self.notchWidthTweak[Self.hwModel] ?? 0))
         }
-        if !preview, let why = Self.gateClosed() {
+        if !preview, case (false, let why) = Gate.check() {
             NSLog("NotchFight: not showing (\(why))"); NSApp.terminate(nil); return
         }
         for name in planSelection() { enqueue(name) }
@@ -125,6 +120,7 @@ final class App: NSObject, NSApplicationDelegate {
         root.addSublayer(art)
         v.autoresizingMask = [.width, .height]
         win.contentView = v
+        shownSince = Date()
         tick()
         updateMask()
         win.orderFrontRegardless()
@@ -270,24 +266,11 @@ final class App: NSObject, NSApplicationDelegate {
     // `nf preview` (--only): just the forced clips, once, then close; no rotation, no gate, no sessions.
     let preview = CommandLine.arguments.contains("--only")
 
-    // `nf gate` (scripts/nf.py) decides whether the panel may show: paused, quiet hours, screen sharing.
-    // Asked at launch and every few seconds while up; the reason when it may not, nil when it may (or
-    // when the script is missing: a copied app never hides itself for that).
-    static func gateClosed() -> String? {
-        let script = Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("scripts/nf.py")
-        guard FileManager.default.fileExists(atPath: script.path) else { return nil }
-        let p = Process(), out = Pipe()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/env"); p.arguments = ["python3", script.path, "gate"]
-        p.standardOutput = out; p.standardError = FileHandle.nullDevice
-        guard (try? p.run()) != nil else { return nil }
-        p.waitUntilExit()
-        let why = String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return p.terminationStatus == 0 ? nil : why
-    }
+    // Gate.check() (Gate.swift) decides whether the panel may show: paused, quiet hours, screen sharing.
+    // Asked at launch and every few seconds while up; in-process, so asking costs next to nothing.
     func watchGate() {
         DispatchQueue.global(qos: .utility).async {
-            if let why = Self.gateClosed() { DispatchQueue.main.async { NSLog("NotchFight: hiding (\(why))"); self.close() } }
+            if case (false, let why) = Gate.check() { DispatchQueue.main.async { NSLog("NotchFight: hiding (\(why))"); self.close() } }
         }
     }
 
@@ -299,6 +282,11 @@ final class App: NSObject, NSApplicationDelegate {
         transDirs = Self.subdirs(res.appendingPathComponent("transitions"))
         allowed = preview ? [] : activeClips()
         remaining = allowed
+        if !preview {                                                // carry on with the last launch's round
+            let done = Set(state.played), left = allowed.filter { !done.contains($0) }
+            if left.isEmpty { state.played = [] } else { remaining = left }
+            lastPlayed = state.lastClip
+        }
         var forced: [String] = [], left = Set(remaining)
         for first in forcedFirst() {
             let name = clipDirs[first] != nil ? first
@@ -333,7 +321,7 @@ final class App: NSObject, NSApplicationDelegate {
     // Stay in the current theme for up to maxPerVisit clips, then move to another theme;
     // always drawing from the clips not yet played this round.
     func pickNext() -> String? {
-        if remaining.isEmpty { remaining = allowed }                    // new round
+        if remaining.isEmpty { remaining = allowed; state.played = [] }  // new round
         if remaining.isEmpty { return nil }
         var pool = remaining.filter { $0 != lastPlayed }
         if pool.isEmpty { pool = remaining }
@@ -347,12 +335,35 @@ final class App: NSObject, NSApplicationDelegate {
         guard let clipFrames = frames("c:" + name, clipDirs[name]) else { return }
         let t = themeOf(name)
         if !theme.isEmpty && t != theme {                             // the iris closes on this theme, opens on the next
-            for tk in ["\(theme)__out", "\(t)__in"] { if let tr = frames("t:" + tk, transDirs[tk]) { queue.append(tr) } }
+            for tk in ["\(theme)__out", "\(t)__in"] { if let tr = frames("t:" + tk, transDirs[tk]) { queue.append((nil, tr)) } }
         }
+        picked(name)
+        queue.append((name, clipFrames))
+    }
+
+    // The rotation's bookkeeping once a clip is chosen (it is queued, not yet playing).
+    func picked(_ name: String) {
+        let t = themeOf(name)
         visitCount = (t == theme) ? visitCount + 1 : 1
         theme = t; lastPlayed = name
         remaining.removeAll { $0 == name }
-        queue.append(clipFrames)
+    }
+
+    // A clip starts playing: it counts as played this round, in state.json too (a queued clip that never
+    // played, because the panel closed first, stays in the round for the next launch).
+    func started(_ name: String) {
+        if preview { return }
+        if !state.played.contains(name) { state.played.append(name) }
+        state.lastClip = name
+        state.countPlay(name)
+        saveState()
+    }
+
+    func saveState() {
+        if preview { return }
+        let secs = Int(Date().timeIntervalSince(shownSince))         // whole seconds; the rest waits for the next save
+        state.addShown(secs); shownSince += Double(secs)
+        state.save()
     }
 
     func tick() {
@@ -360,7 +371,8 @@ final class App: NSObject, NSApplicationDelegate {
             if preparing && queue.isEmpty { return }                  // the next one is nearly ready: hold this frame
             if queue.isEmpty, let next = pickNext() { enqueue(next) }
             guard !queue.isEmpty else { close(); return }             // only forced clips, and they are done
-            current = queue.removeFirst(); idx = 0
+            let item = queue.removeFirst(); current = item.frames; idx = 0
+            if let name = item.name { started(name) }
             prepareNext()
         }
         art.contents = current[idx]
@@ -407,6 +419,7 @@ final class App: NSObject, NSApplicationDelegate {
     var closing = false
     func close() {
         if closing { return }; closing = true
+        saveState()
         animate(to: 0, duration: 0.3, spring: false) { NSApp.terminate(nil) }
     }
 }
@@ -424,6 +437,27 @@ if CommandLine.arguments.contains("--print-selection") {
     for n in forced { print("forced: \(n)") }
     print("panel: \(p.allowed.isEmpty && forced.isEmpty ? "hidden (no clips active)" : "shown")")
     exit(0)
+}
+
+// --print-rotation N: play N clips without showing anything (the rotation and state.json as for real,
+// no frames loaded) and print them, one "played: <clip>" per line. For tests of the round across launches.
+if let i = CommandLine.arguments.firstIndex(of: "--print-rotation"), i + 1 < CommandLine.arguments.count,
+   let n = Int(CommandLine.arguments[i + 1]) {
+    let p = App(), forced = p.planSelection()
+    // As in the app: each clip starts before the next is picked (prepareNext runs once one starts).
+    var order = Array(forced.prefix(n))
+    for name in order { p.picked(name); p.started(name) }
+    while order.count < n, let next = p.pickNext() { p.picked(next); p.started(next); order.append(next) }
+    for name in order { print("played: \(name)") }
+    exit(0)
+}
+
+// --gate: Gate.check() as `nf gate` prints it (exit 0: may show, 1: may not). NOTCH_FIGHT_NOW (epoch
+// seconds) fixes "now", for tests/test_app_gate.py.
+if CommandLine.arguments.contains("--gate") {
+    let now = Double(ProcessInfo.processInfo.environment["NOTCH_FIGHT_NOW"] ?? "").map { Date(timeIntervalSince1970: $0) } ?? Date()
+    let (ok, why) = Gate.check(now: now)
+    print(why); exit(ok ? 0 : 1)
 }
 
 let app = NSApplication.shared

@@ -16,9 +16,10 @@
     nf check [<theme>...]          check themes against the rules: loops, the font, text long enough
                                    to read and inside the panel (all of them when none is named)
 
-Whether the panel may show right now is decided in one place, `gate()`, which the Claude Code hook
-(scripts/notch-hook.sh) and the app (every few seconds while it is up) both ask: `nf gate` exits 0
-when it may show, 1 when it may not, and prints why.
+Whether the panel may show right now is decided by `gate()`, which the Claude Code hook
+(scripts/notch-hook.sh) asks: `nf gate` exits 0 when it may show, 1 when it may not, and prints why.
+The app and the menu ask the same rules in Swift (app/Gate.swift, every few seconds while up);
+tests/test_app_gate.py keeps the two answering alike, so a change here goes there too.
 State: ~/.config/notch-fight/paused ({"until": <epoch> | null}) and, in config.json, "quiet",
 "pauseOnShare", "delay" (seconds) and "click". NOTCH_FIGHT_CONFIG moves config.json, and the paused file next to it (tests/dev).
 """

@@ -60,6 +60,45 @@ class AppSelection(unittest.TestCase):
         self.assertIn("unknown clip 'nope__clip'", out)
 
 @unittest.skipUnless(HAS_APP, 'needs macOS and ./build.sh')
+class AppRotation(unittest.TestCase):
+    """The round outlives the app: state.json (next to the config) keeps what has played, so relaunches
+    carry on with the round and no clip repeats until all have. --print-rotation N plays N clips, unseen."""
+    def setUp(self):
+        self.five = ON[:5]
+        self.cfg = config_file({'newClips': 'disabled', 'enabled': self.five})
+        self.state = os.path.join(os.path.dirname(self.cfg), 'state.json')
+
+    def play(self, n):
+        env = dict(os.environ, NOTCH_FIGHT_CONFIG=self.cfg); env.pop('NOTCH_FIGHT_FIRST', None)
+        r = subprocess.run([BIN, '--print-rotation', str(n)], env=env, capture_output=True, text=True, timeout=90)
+        return [l.split(': ', 1)[1] for l in r.stdout.splitlines() if l.startswith('played: ')]
+
+    def test_a_round_spans_launches_without_repeats(self):
+        first, second = self.play(2), self.play(3)
+        self.assertEqual(sorted(first + second), sorted(self.five))
+        third = self.play(5)                                         # a new round: all five again
+        self.assertEqual(sorted(third), sorted(self.five))
+        self.assertNotEqual(third[0], second[-1])                    # never the same clip twice in a row
+
+    def test_it_counts_plays(self):
+        self.play(3); self.play(4)
+        state = json.load(open(self.state))
+        self.assertEqual(sum(state['stats']['plays'].values()), 7)
+        self.assertEqual(len(state['rotation']['played']), 2)       # 3 + 4 = one round of 5, then 2 of the next
+
+    def test_clips_turned_off_leave_the_round_and_new_ones_join(self):
+        self.play(3)
+        state = json.load(open(self.state)); played = state['rotation']['played']
+        json.dump({'newClips': 'disabled', 'enabled': self.five + [ON[5]]}, open(self.cfg, 'w'))
+        rest = self.play(3)                                          # the 2 not played yet + the new one
+        self.assertEqual(sorted(rest), sorted([c for c in self.five if c not in played] + [ON[5]]))
+
+    def test_unknown_state_keys_are_kept(self):
+        json.dump({'later': {'x': 1}}, open(self.state, 'w'))
+        self.play(1)
+        self.assertEqual(json.load(open(self.state))['later'], {'x': 1})
+
+@unittest.skipUnless(HAS_APP, 'needs macOS and ./build.sh')
 class AppDefaultOff(unittest.TestCase):
     """A clip whose build folder has a .default-off marker stays out of the rotation until enabled."""
     @classmethod

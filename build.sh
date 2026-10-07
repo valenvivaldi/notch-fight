@@ -35,17 +35,21 @@ for d in clips transitions; do
   rsync -a --delete --delete-excluded --include='*/' --include='frames.png' --include='count' --include='.default-off' \
     --exclude='*' "$OUT/$d/" "$APP/Contents/Resources/$d/"
 done
+# stale <binary> <sources...>: missing, or older than one of its sources (only then is the Swift compiled)
+stale() { local bin="$1"; shift; [[ -x "$bin" ]] || return 0; for s in "$@"; do [[ "$s" -nt "$bin" ]] && return 0; done; return 1; }
 # pin the deployment target: some toolchains default to a macOS newer than the running one (LaunchServices error -10825)
-swift() { [[ -x "$2" && "$2" -nt "$1" ]] || swiftc -O -target "$(uname -m)-apple-macos13.0" "$1" -o "$2"; }
-swift "$ROOT/app/main.swift" "$APP/Contents/MacOS/NotchFight"
+swift() { swiftc -O -target "$(uname -m)-apple-macos13.0" "$@"; }
+SRC=("$ROOT/app/main.swift" "$ROOT/app/Gate.swift" "$ROOT/app/State.swift")
+stale "$APP/Contents/MacOS/NotchFight" "${SRC[@]}" && swift "${SRC[@]}" -o "$APP/Contents/MacOS/NotchFight"
 codesign -s - --force "$APP" >/dev/null 2>&1
 
 # the menu bar icon (nf menu on): a tiny separate app, so it can stay up while the panel comes and goes
 MENU="$OUT/NotchFightMenu.app"
 mkdir -p "$MENU/Contents/MacOS"
 cp "$ROOT/app/MenuInfo.plist" "$MENU/Contents/Info.plist"
-if [[ ! -x "$MENU/Contents/MacOS/NotchFightMenu" || "$ROOT/app/menu.swift" -nt "$MENU/Contents/MacOS/NotchFightMenu" ]]; then
-  swift "$ROOT/app/menu.swift" "$MENU/Contents/MacOS/NotchFightMenu"
+MSRC=("$ROOT/app/menu.swift" "$ROOT/app/Gate.swift")   # -parse-as-library: menu.swift has an @main
+if stale "$MENU/Contents/MacOS/NotchFightMenu" "${MSRC[@]}"; then
+  swift -parse-as-library "${MSRC[@]}" -o "$MENU/Contents/MacOS/NotchFightMenu"
   codesign -s - --force "$MENU" >/dev/null 2>&1
 fi
 
