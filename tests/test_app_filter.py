@@ -4,7 +4,7 @@ By default the built binary runs with --print-selection: it works out the select
 prints it and exits before the app starts — no panel, and the window you are typing in keeps focus.
 NOTCH_FIGHT_TEST_PANEL=1 also runs real launches (through `open -g`: the panel shows, focus stays).
 Skipped when there is no build or no Mac."""
-import json, os, platform, subprocess, tempfile, time, unittest
+import json, os, platform, signal, subprocess, tempfile, time, unittest
 
 ROOT = os.path.join(os.path.dirname(__file__), '..')
 APP = os.path.join(ROOT, 'build', 'NotchFight.app')
@@ -55,6 +55,10 @@ class AppSelection(unittest.TestCase):
         self.assertIn(f'forced: {CLIPS[0]}', out)
         self.assertIn('panel: shown', out)
 
+    def test_it_finds_the_transition_styles(self):
+        out, _, _ = selection({})
+        self.assertIn('transition styles: first, crt, dissolve, wipe', out)
+
     def test_unknown_names_in_the_lists_are_logged(self):
         out, _, _ = selection({'newClips': 'enabled', 'disabled': ['nope__clip']})
         self.assertIn("unknown clip 'nope__clip'", out)
@@ -93,6 +97,14 @@ class AppRotation(unittest.TestCase):
         rest = self.play(3)                                          # the 2 not played yet + the new one
         self.assertEqual(sorted(rest), sorted([c for c in self.five if c not in played] + [ON[5]]))
 
+    def test_a_stats_reset_holds(self):
+        self.play(2)
+        st = json.load(open(self.state)); st.pop('stats'); json.dump(st, open(self.state, 'w'))   # nf stats reset
+        self.play(1)
+        st = json.load(open(self.state))
+        self.assertEqual(sum(st['stats']['plays'].values()), 1)
+        self.assertEqual(len(st['rotation']['played']), 3)                # the round was kept
+
     def test_unknown_state_keys_are_kept(self):
         json.dump({'later': {'x': 1}}, open(self.state, 'w'))
         self.play(1)
@@ -123,17 +135,32 @@ class AppDefaultOff(unittest.TestCase):
 class AppPanel(unittest.TestCase):
     """Real launches, in the background (`open -g -n`): the panel shows, the focused window keeps focus.
     Not resident (launched to show, quits when done): the resident app has tests/test_resident.py."""
+    @staticmethod
+    def pids():
+        r = subprocess.run(['pgrep', '-x', 'NotchFight'], capture_output=True, text=True)
+        return {int(p) for p in r.stdout.split()}
+
     def launch(self, cfg, wait=3.0):
-        """Launch a new instance; return (its log, whether it quit on its own within `wait` s)."""
+        """Launch a new instance; return (its log, whether it quit on its own within `wait` s). Only that
+        instance is ever stopped (the PID that was not there before): the resident app keeps running."""
         cfg = dict(cfg, resident=False)
         log = os.path.join(tempfile.mkdtemp(), 'err.log')
+        before = self.pids()
         p = subprocess.Popen(['open', '-g', '-n', '-W', '--env', f'NOTCH_FIGHT_CONFIG={config_file(cfg)}',
                               '--stderr', log, APP])
-        try: p.wait(timeout=wait); quit_alone = True
-        except subprocess.TimeoutExpired:
-            quit_alone = False
-            subprocess.run(['pkill', '-nx', 'NotchFight'], capture_output=True)   # the newest instance: ours
-            p.wait(timeout=5)
+        ours = set()
+        end = time.time() + wait
+        while time.time() < end:
+            ours |= self.pids() - before                              # it may come and go within the wait
+            if p.poll() is not None: break
+            time.sleep(0.05)
+        quit_alone = p.poll() is not None
+        if not quit_alone:
+            for pid in ours:
+                try: os.kill(pid, signal.SIGTERM)                     # it retracts, then quits
+                except ProcessLookupError: pass
+            try: p.wait(timeout=5)
+            except subprocess.TimeoutExpired: p.kill()                # never seen: stop waiting, kill nothing else
         return (open(log).read() if os.path.exists(log) else ''), quit_alone
 
     def test_nothing_active_quits_without_a_panel(self):

@@ -11,10 +11,10 @@ ONLY=<theme|theme__clip>[,...] renders just those clips and, when a theme's firs
 theme's two halves, leaving the rest of the cwd as it is (it needs a full build first).
 Clips render in parallel, one per process (JOBS=<n> sets how many; JOBS=1 renders them in this process). Either way `.built` lists the clips
 rendered by this run (build.sh makes GIFs for those)."""
-import multiprocessing, os, random, shutil, sys, zlib
+import multiprocessing, os, random, re, shutil, sys, zlib
 from engine import *
-from themes import load_themes
-from transitions import iris_out, iris_in
+from themes import load_themes, transition_styles
+from transitions import half_out, half_in
 import overlays
 
 def selected(themes, only):
@@ -37,11 +37,27 @@ def pack(dd, frames):
     for i,fr in enumerate(frames): sh.paste(fr,((i%cols)*W,(i//cols)*H))
     sh.save(f'{dd}/frames.png'); open(f'{dd}/count','w').write(f'{len(frames)}\n')
 
+CLAUDE=((217,119,87),(168,80,54))                            # Claude's own orange: in every clip, not the scene's light
+
+def glow_color(fr):
+    """The light a frame spills below the panel (config "glow"), 'rrggbb'. Its hue: the scene's pixels with
+    the vivid ones weighing most (the green rain, the fire, the cursed red; not white text, grey sky or
+    Claude itself). Its brightness: how lit the scene is, so a night scene glows faintly."""
+    px=list(fr.convert('RGB').resize((37,13),Image.BILINEAR).getdata())
+    px=[p for p in px if all(sum((a-b)**2 for a,b in zip(p,c))>45**2 for c in CLAUDE)] or px
+    weight=[(max(p)-min(p))*max(p) for p in px]
+    wsum=sum(weight)
+    hue=[sum(p[i]*w for p,w in zip(px,weight))/wsum for i in range(3)] if wsum else [180,180,180]
+    lit=sum(sum(p) for p in px)/len(px)/3/255                  # 0 black .. 1 white
+    v=min(1,0.35+lit*1.6)*255/(max(hue) or 1)
+    return ''.join(f'{min(255,round(c*v)):02x}' for c in hue)
+
 def render_clip(theme, name, n, frame_fn, off):
     random.seed(zlib.crc32(name.encode()))
     frames=[frame_fn(f) for f in range(n)]
     dd=f'clips/{theme}__{name}'; shutil.rmtree(dd,ignore_errors=True); os.makedirs(dd)
     pack(dd,frames)
+    open(f'{dd}/glow','w').write('\n'.join(glow_color(fr) for fr in frames)+'\n')   # one colour per frame
     if off: open(f'{dd}/.default-off','w').close()   # shipped off: ./clips.sh and the app read this
     big=[fr.resize((W*2,H*2),Image.NEAREST) for fr in frames]
     sh=Image.new('RGB',(W*4,H*12)); pick=[int(i*(n-1)/11) for i in range(12)]
@@ -78,11 +94,15 @@ if __name__=='__main__':
         if name==THEMES[theme][0][0]: first[theme]=Image.open(f'clips/{theme}__{name}/frames.png').convert('RGB').crop((0,0,W,H))
     os.makedirs('transitions',exist_ok=True)
     for dd in os.listdir('transitions'):                         # the old per-pair transitions, gone
-        if not dd.endswith(('__out','__in')): shutil.rmtree(f'transitions/{dd}',ignore_errors=True)
+        if not re.search(r'__(out|in)(__[a-z]+)?$',dd): shutil.rmtree(f'transitions/{dd}',ignore_errors=True)
+    styles=transition_styles()
     for theme,img in first.items():
-        for half,frames in (('out',iris_out(img)),('in',iris_in(img))):
-            dd=f'transitions/{theme}__{half}'; shutil.rmtree(dd,ignore_errors=True); os.makedirs(dd)
-            pack(dd,frames)
+        for dd in os.listdir('transitions'):                     # this theme's halves, made again below
+            if re.fullmatch(re.escape(theme)+r'__(out|in)(__[a-z]+)?',dd): shutil.rmtree(f'transitions/{dd}',ignore_errors=True)
+        for i,style in enumerate(styles[theme]):                 # the first style: <theme>__out; others: __out__<style>
+            for half,frames in (('out',half_out(style,img)),('in',half_in(style,img))):
+                dd=f'transitions/{theme}__{half}'+(f'__{style}' if i else ''); os.makedirs(dd)
+                pack(dd,frames)
     for name,frames in (('wait',overlays.wait_frames()),('count',overlays.count_frames())):   # cheap: always
         dd=f'overlays/{name}'; shutil.rmtree(dd,ignore_errors=True); os.makedirs(dd); pack(dd,frames)
     open('.built','w').write('\n'.join(f'{t}__{c[0]}' for t,c in todo)+'\n')

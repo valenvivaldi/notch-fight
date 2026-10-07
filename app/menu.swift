@@ -58,11 +58,24 @@ final class Menu: NSObject, NSApplicationDelegate, NSMenuDelegate {
         add(menu, "Resume", paused ? #selector(act(_:)) : nil, ["resume"])
         menu.addItem(.separator())
 
+        // one nf call for the themes (on / off / some) and the stats
+        let data = (try? JSONSerialization.jsonObject(with: Data(run(["_menu"]).1.utf8))) as? [String: Any] ?? [:]
+        let themes = (data["themes"] as? [[String]] ?? []).filter { $0.count == 2 }.map { (name: $0[0], state: $0[1]) }
+
         let preview = NSMenu()
-        for t in run(["_themes"]).1.split(separator: "\n").map(String.init) where !t.isEmpty {
-            add(preview, t, #selector(act(_:)), ["preview", t])
+        grouped(preview, themes) { m, fr, members in
+            if members.count == 1 { self.add(m, members[0].name, #selector(self.act(_:)), ["preview", members[0].name]); return }
+            let sm = NSMenu()
+            for t in members { self.add(sm, t.name, #selector(self.act(_:)), ["preview", t.name]) }
+            self.sub(m, fr, sm)
         }
         sub(menu, "Preview", preview)
+        sub(menu, "Themes", themesMenu(themes))
+        let stats = NSMenu()
+        for line in data["stats"] as? [String] ?? [] { add(stats, line, nil) }
+        stats.addItem(.separator())
+        add(stats, "Reset the stats…", #selector(resetStats))
+        sub(menu, "Stats", stats)
         menu.addItem(.separator())
 
         let hide = (cfg["pauseOnShare"] as? Bool) ?? true
@@ -73,7 +86,7 @@ final class Menu: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let next = (cfg["click"] as? String) == "next"
         let click = NSMenu()
-        add(click, "Closes it", #selector(act(_:)), ["click", "close"], on: !next)
+        add(click, "Hides it (until the next prompt)", #selector(act(_:)), ["click", "close"], on: !next)
         add(click, "Skips to the next clip (double click closes)", #selector(act(_:)), ["click", "next"], on: next)
         sub(menu, "A click on the panel", click)
 
@@ -114,6 +127,64 @@ final class Menu: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    // Which themes play: a check per theme (a dash when only some of its clips are on); a click turns it on
+    // or, when it is on, off. Themes of one franchise (dbz, dbz-buu, ...) share a submenu, and the
+    // franchises are split alphabetically into a few groups, so the list never runs off the screen.
+    func themesMenu(_ themes: [(name: String, state: String)]) -> NSMenu {
+        let m = NSMenu()
+        let names = themes.map(\.name)
+        add(m, "Turn them all on", #selector(act(_:)), ["clips", "all", "on"])
+        add(m, "Turn them all off", #selector(act(_:)), ["clips", "all", "off"])
+        add(m, "Back to the defaults", #selector(act(_:)), ["clips", "defaults"])
+        let arg = names.filter { $0 == "arg" || $0.hasPrefix("arg-") }
+        if !arg.isEmpty { add(m, "Only the Argentine ones", #selector(act(_:)), ["clips", "only"] + arg) }
+        m.addItem(.separator())
+        grouped(m, themes) { g, fr, members in
+                if members.count == 1 { self.themeItem(g, members[0].name, [members[0].name], members[0].state); return }
+                let all = members.map(\.state)
+                let s = all.allSatisfy { $0 == "on" } ? "on" : all.allSatisfy { $0 == "off" } ? "off" : "some"
+                let sm = NSMenu()
+                self.themeItem(sm, "All of \(fr)", members.map(\.name), s)
+                sm.addItem(.separator())
+                for t in members { self.themeItem(sm, t.name, [t.name], t.state) }
+                let i = NSMenuItem(title: fr, action: nil, keyEquivalent: ""); i.submenu = sm; i.state = self.mark(s); g.addItem(i)
+        }
+        return m
+    }
+
+    // Themes by franchise (the name before the first "-": dbz, dbz-buu, ...), the franchises split
+    // alphabetically into about six submenus ("A–C", ...); `item` adds one franchise to its submenu.
+    func grouped(_ m: NSMenu, _ themes: [(name: String, state: String)],
+                 _ item: (NSMenu, String, [(name: String, state: String)]) -> Void) {
+        let franchise = { (t: String) in String(t.split(separator: "-").first ?? Substring(t)) }
+        var groups: [(String, [(name: String, state: String)])] = []
+        for t in themes {
+            if let i = groups.firstIndex(where: { $0.0 == franchise(t.name) }) { groups[i].1.append(t) } else { groups.append((franchise(t.name), [t])) }
+        }
+        let size = max(8, Int((Double(groups.count) / 6).rounded(.up)))
+        for start in stride(from: 0, to: groups.count, by: size) {
+            let chunk = Array(groups[start..<min(start + size, groups.count)])
+            let g = NSMenu()
+            for (fr, members) in chunk { item(g, fr, members) }
+            let first = chunk.first!.0.prefix(1).uppercased(), last = chunk.last!.0.prefix(1).uppercased()
+            sub(m, first == last ? first : "\(first)–\(last)", g)
+        }
+    }
+    func mark(_ state: String) -> NSControl.StateValue { state == "on" ? .on : state == "some" ? .mixed : .off }
+    func themeItem(_ m: NSMenu, _ title: String, _ names: [String], _ state: String) {
+        add(m, title, #selector(act(_:)), ["clips", state == "on" ? "disable" : "enable"] + names)
+        m.items.last?.state = mark(state)
+    }
+
+    @objc func resetStats() {
+        NSApp.activate(ignoringOtherApps: true)
+        let a = NSAlert()
+        a.messageText = "Reset the stats?"
+        a.informativeText = "Plays, panel time and waits go back to zero. Which clips have played this round is kept."
+        a.addButton(withTitle: "Reset"); a.addButton(withTitle: "Cancel")
+        if a.runModal() == .alertFirstButtonReturn { run(["stats", "reset"]) }
+    }
+
     // The checklist needs a real terminal: open one running `nf clips`.
     @objc func chooseClips() {
         let script = FileManager.default.temporaryDirectory.appendingPathComponent("notch-fight-clips.command")
@@ -128,6 +199,20 @@ final class Menu: NSObject, NSApplicationDelegate, NSMenuDelegate {
 @main enum MenuMain {
     static let menu = Menu()
     static func main() {
+        // --print-menu: build the menu as when it opens and print it as a tree (✓ on, – some), then exit.
+        // For tests and checks: NOTCH_FIGHT_CONFIG points it at another config.
+        if CommandLine.arguments.contains("--print-menu") {
+            let m = NSMenu(); menu.menuNeedsUpdate(m)
+            func dump(_ m: NSMenu, _ depth: Int) {
+                for i in m.items {
+                    if i.isSeparatorItem { print(String(repeating: "  ", count: depth) + "---"); continue }
+                    let mark = i.state == .on ? "✓ " : i.state == .mixed ? "– " : ""
+                    print(String(repeating: "  ", count: depth) + mark + i.title + (i.isEnabled || i.submenu != nil ? "" : " (label)"))
+                    if let s = i.submenu { dump(s, depth + 1) }
+                }
+            }
+            dump(m, 0); exit(0)
+        }
         let app = NSApplication.shared
         app.delegate = menu
         app.setActivationPolicy(.accessory)

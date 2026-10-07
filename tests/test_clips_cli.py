@@ -34,6 +34,25 @@ class Commands(unittest.TestCase):
         self.assertEqual(json.load(open(path))['newClips'], 'disabled')
         self.assertEqual(run(path, 'list').stdout.splitlines()[1:], before)
 
+    def themes(self, path):
+        return dict(l.split('\t') for l in run(path, 'themes').stdout.splitlines())
+
+    def test_only_all_and_defaults(self):
+        path = config_file({})
+        self.assertEqual(run(path, 'only', THEME).returncode, 0)
+        st = self.themes(path)
+        self.assertEqual({t for t, s in st.items() if s != 'off'}, {THEME})
+        run(path, 'all', 'off'); self.assertEqual(set(self.themes(path).values()), {'off'})
+        run(path, 'all', 'on'); self.assertEqual(set(self.themes(path).values()), {'on'})
+        run(path, 'defaults')
+        self.assertEqual(self.themes(path), self.themes(config_file({})))      # as with an empty config
+
+    def test_themes_says_some_when_a_theme_is_half_on(self):
+        mine = [c for c in BUILT if c.split('__')[0] == THEME]
+        if len(mine) < 2: self.skipTest('needs a theme with two clips')
+        path = config_file({'newClips': 'enabled', 'disabled': [mine[0]]})
+        self.assertEqual(self.themes(path)[THEME], 'some')
+
     def test_a_typo_fails_and_suggests(self):
         r = run(config_file({}), 'disable', CLIP[:-1])
         self.assertEqual(r.returncode, 1)
