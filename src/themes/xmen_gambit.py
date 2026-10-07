@@ -9,7 +9,7 @@ from engine import *
 from themes.xmen_nightcrawler import DR                            # same show: the Sentinel drone
 
 THEME = 'xmen-gambit'
-N_ = 320
+N_ = 317
 CX = 30                                                             # the loop keyframe position
 
 PINK, PINK_HI = (255,80,200), (255,210,244)

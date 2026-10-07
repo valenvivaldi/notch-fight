@@ -173,7 +173,7 @@ def _fx_glados(d, im, e, f):
     P = _tf(ax, ay, tilt, sx, sc); poly = lambda pts: [P(q) for q in pts]
     # cables dangling from the body
     for k, (a, b) in enumerate((((-3,4),(-9,14)), ((-2,9),(-6,20)), ((7,8),(11,18)))):
-        sw = math.sin(f*0.1+k)*1.2
+        sw = math.sin(2*math.pi*f/58+k)*1.2                           # a 58-frame sway: the clip loops
         d.line([P(a), P(((a[0]+b[0])/2+sw, (a[1]+b[1])/2+2)), P((b[0]+sw, b[1]))], fill=(30,30,36))
     d.polygon(poly(_SPINE), fill=(58,60,68))
     for y in (3, 7, 11): d.line(poly([(-3,y),(3,y)]), fill=(96,100,108))
@@ -533,8 +533,8 @@ def clip_triumph(f):
     # --- state defaults (the neutral pose) ---
     cx, feet, pose, flip = CX, GROUND, guard_pose(f), False
     aim = 0.08; gcol = BLUE; show_gun = True
-    g_ax, g_ay = MOUNT; g_tilt = 0.05*math.sin(2*math.pi*f/116); g_sx, g_sc = 1.0, GSC
-    eye = YEL; glow = 0.8+0.2*math.sin(2*math.pi*f/29); attached = True
+    g_ax, g_ay = MOUNT; g_tilt = round(0.05*math.sin(2*math.pi*f/116), 6); g_sx, g_sc = 1.0, GSC   # rounded: sin(2pi*k) is not
+    eye = YEL; glow = round(0.8+0.2*math.sin(2*math.pi*f/29), 6); attached = True                     # quite 0, and it shows
     turret_r = 0.0; tfire = False; teye = False; lasers = []
     gas = 0.0; pull = 0.0; gap = 0.0; moonp = 0
     portals = []          # (x, y, k, col, orient, front)

@@ -95,13 +95,13 @@ def _fx_glow(d,im,e,f):
     """Molten steel far below the catwalk: a low, slowly breathing orange glow + rising embers."""
     px=im.load()
     for x in range(W):
-        k=0.55+0.25*math.sin(x*0.09+f*math.pi/30)+0.2*math.sin(x*0.23-f*math.pi/15)
+        k=round(0.55+0.25*math.sin(x*0.09+f*math.pi/30)+0.2*math.sin(x*0.23-f*math.pi/15),6)   # (rounded: float noise)
         for y in range(GROUND+3,H):
             a=k*(y-GROUND-2)/(H-GROUND-2)
             blend(px,x,y,(120,34,6),a*0.6)
     for i in range(7):
         x=(i*29+11)%W; y=H-1-((f+i*9)%30)*1.2
-        if y>GROUND-24: d.point((x+int(math.sin((f+i*5)*0.3)*2),int(y)),fill=(200,90,30) if i%2 else (150,60,20))
+        if y>GROUND-24: d.point((x+int(math.sin(2*math.pi*(f+i*5)/20)*2),int(y)),fill=(200,90,30) if i%2 else (150,60,20))
 
 @fx('term_gun')
 def _fx_gun(d,im,e,f):

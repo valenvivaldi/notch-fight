@@ -11,7 +11,7 @@ import zlib
 from engine import *
 
 THEME = 'cyberpunk-edgerunners'
-N_ = 289                                                           # (N_-1) % 8 == 0: the rain loops too
+N_ = 288                                                           # N_ % 8 == 0: the rain loops too
 CX, VX = 30, 150                                                   # the neutral pose: David, Smasher
 SANDY = (40,255,150)                                               # the Sandevistan green
 HOLD = N_-8                                                        # the last frames hold the neutral pose

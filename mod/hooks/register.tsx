@@ -88,18 +88,38 @@ function pickNext(): string | undefined {
   return pickOf(other.length ? other : same)
 }
 
+// A clip's or transition's frames: build.py packs them into frames.png and writes how many in count
+// (an older build left them loose, as NNN.png)
 async function itemOf($: EngineInterface, dir: string, name: string): Promise<Item | null> {
   try {
-    const count = (await $.fs.list(dir)).filter(f => f.name.endsWith('.png')).length
+    const count = (await $.fs.exists(`${dir}/count`)) ? parseInt(await $.fs.read(`${dir}/count`), 10) || 0
+      : (await $.fs.list(dir)).filter(f => /^\d{3}\.png$/.test(f.name)).length
     return count ? { name, dir, count } : null
   } catch { return null }
 }
 
+// The image mode sends each frame as a PNG: a packed clip is unpacked once into build/mod/<name>.png/
+// (scripts/frames.py, which skips it when that's up to date), loose frames are used as they are.
+let pngsFor = '', pngsDir = ''
+async function pngDir($: EngineInterface, it: Item): Promise<string> {
+  if (pngsFor === it.dir) return pngsDir
+  let out = it.dir
+  if (await $.fs.exists(`${it.dir}/count`)) {
+    out = `${root}/build/mod/${it.name}.png`
+    const r = await $.process.run(['python3', `${root}/scripts/frames.py`, 'unpack', it.dir, out], { timeoutMs: 120000 })
+    if (r.exitCode !== 0) throw new Error(`frames.py: ${r.stderr.slice(0, 200)}`)
+  }
+  pngsFor = it.dir; pngsDir = out
+  return out
+}
+
 async function enqueue($: EngineInterface, name: string) {
   const t = themeOf(name)
-  if (theme && t !== theme) {
-    const tr = await itemOf($, `${root}/build/transitions/${theme}__${t}`, `t_${theme}__${t}`)
-    if (tr) queue.push(tr)
+  if (theme && t !== theme) {                             // the iris closes on this theme, opens on the next
+    for (const half of [`${theme}__out`, `${t}__in`]) {
+      const tr = await itemOf($, `${root}/build/transitions/${half}`, `t_${half}`)
+      if (tr) queue.push(tr)
+    }
   }
   const clip = await itemOf($, `${root}/build/clips/${name}`, name)
   if (clip) queue.push(clip)
@@ -118,7 +138,7 @@ const perChunk = () => Math.max(1, Math.floor(CHUNK_BYTES / (columns * rows * 9)
 async function loadPacked($: EngineInterface, it: Item, m: Mode) {
   const glyphs = isText(m) ? m : 'quad'
   const out = `${root}/build/mod/${it.name}.${columns}x${rows}.${glyphs}`
-  const src = await $.fs.stat(`${it.dir}/000.png`)
+  const src = await $.fs.stat((await $.fs.exists(`${it.dir}/frames.png`)) ? `${it.dir}/frames.png` : `${it.dir}/000.png`)
   const have = (await $.fs.exists(`${out}/000.cells`)) && (await $.fs.stat(`${out}/000.cells`)).mtimeMs >= src.mtimeMs
   if (!have) {
     const r = await $.process.run(['python3', `${root}/scripts/mod_cells.py`, it.dir, String(columns), String(rows), out, glyphs], { timeoutMs: 120000 })
@@ -190,7 +210,7 @@ async function tick($: EngineInterface) {
       cells = cellsOf(await frameAt($, frame))
       if (site) await $.ui.blit({ requestId: site, key: KEY, cells })
     } else {
-      png = (await $.fs.read(`${item.dir}/${pad(frame)}.png`, { as: 'bytes' })).base64
+      png = (await $.fs.read(`${await pngDir($, item)}/${pad(frame)}.png`, { as: 'bytes' })).base64
       if (site) {
         const r = await $.ui.blit({ requestId: site, key: KEY, source: { png } })
         if (r.deny && /alt|placeholder|cannot/i.test(r.deny)) {     // this terminal shows no pictures

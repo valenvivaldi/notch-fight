@@ -45,7 +45,7 @@ register_bg(THEME, lambda v: (v,v*9//10,v*4//5), decor=_dungeon)
 
 @fx('meshi_torch')
 def _fx_torch(d,im,e,f):
-    _,x,y=e; rr=random.Random(f*7+x)
+    _,x,y=e; rr=random.Random((f%24)*7+x)                             # a 24-frame flicker: it loops
     for _ in range(5):
         px,py=x+rr.randint(-1,1),y-rr.randint(0,4); d.point((px,py),fill=FIRE_HI if py>y-2 else FIRE)
 
@@ -80,7 +80,7 @@ def _fx_dragon(d,im,e,f):
     ly=int(6*lying)
     # tail: tapering segments down to the floor, spikes on top
     for i in range(8):
-        t=i/7; x=cx+12+i*4; y=gy-12+ly*0.5+t*9+math.sin(f*0.15+i*0.7)*(1-lying); r=max(1,4-i//2)
+        t=i/7; x=cx+12+i*4; y=gy-12+ly*0.5+t*9+math.sin(2*math.pi*f/44+i*0.7)*(1-lying); r=max(1,4-i//2)
         dd.ellipse([x-r,y-r,x+r,y+r],fill=red,outline=dark)
         if i%2==0: dd.point((x,y-r-1),fill=horn)
     # legs (front + back), claws
@@ -92,7 +92,7 @@ def _fx_dragon(d,im,e,f):
     dd.ellipse([cx-13,gy-15+ly,cx+9,gy-6+ly],fill=belly)
     for x in range(cx-11,cx+8,3): dd.line([x,gy-13+ly,x,gy-7+ly],fill=(200,130,70,255))
     # folded wing on the back
-    fl=int(2*math.sin(f*0.2)*(1-lying))
+    fl=int(2*math.sin(2*math.pi*f/33)*(1-lying))          # periods that divide the clip: it loops
     wing=[(cx-8,gy-22+ly),(cx+1,gy-39+ly*2-fl),(cx+21,gy-31+ly*2-fl),(cx+15,gy-18+ly)]
     dd.polygon(wing,fill=dark,outline=(60,10,14,255))
     for p in wing[1:3]: dd.line([cx-6,gy-22+ly,p[0],p[1]],fill=(150,40,40,255))
@@ -144,7 +144,7 @@ def _fx_breath(d,im,e,f):
 @fx('meshi_pot')
 def _fx_pot(d,im,e,f):
     """Senshi's pot on a small wood fire: bubbling red stew, steam curling up."""
-    _,x=e; y=GROUND; rr=random.Random(f*5)
+    _,x=e; y=GROUND; rr=random.Random((f%24)*5)
     for k in range(4):                                             # fire under the pot
         fx_,fy=x-5+k*3+rr.randint(-1,1),y-1-rr.randint(0,2); d.point((fx_,fy),fill=FIRE if k%2 else FIRE_HI)
     d.line([x-7,y,x+7,y],fill=(90,60,36))                          # logs
@@ -152,9 +152,9 @@ def _fx_pot(d,im,e,f):
     d.line([x-9,y-11,x+9,y-11],fill=(120,120,132))                 # rim
     d.rectangle([x-7,y-10,x+7,y-9],fill=(190,70,40))               # the stew
     for k in range(3):
-        if (f//3+k)%3==0: d.point((x-4+k*4,y-10),fill=(250,160,90))   # bubbles
+        if (f//4+k)%3==0: d.point((x-4+k*4,y-10),fill=(250,160,90))   # bubbles
     for k in range(3):                                             # steam
-        ph=(f*0.08+k/3)%1; sx=x-4+k*4+math.sin(f*0.25+k*2)*2; sy=y-12-ph*20
+        ph=((f%12)/12+k/3)%1; sx=x-4+k*4+math.sin(2*math.pi*f/24+k*2)*2; sy=y-12-ph*20
         d.point((int(sx),int(sy)),fill=(200,200,210) if ph<0.6 else (110,110,120))
 
 @fx('meshi_ladle')

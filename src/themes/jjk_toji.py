@@ -54,7 +54,7 @@ def _fx_worm(d,im,e,f):
     pts=[]
     for k in range(10):
         t=k/9; a=math.pi*(1+t)                                    # the lower half of a loop: sags in front
-        pts.append((x-1+math.cos(a)*8,y0-math.sin(a)*2+math.sin(f*0.25+k)*0.4))
+        pts.append((x-1+math.cos(a)*8,y0-math.sin(a)*2+math.sin(f*math.pi/12+k)*0.4))   # a 24-frame sway: it loops
     for i,(px,py) in enumerate(pts[:-1]):
         d.rectangle([px-1,py-1,px+1,py],fill=(150,120,164) if i%2 else (126,98,142))
     hx,hy=pts[-1]; op=int(3*mouth)

@@ -11,7 +11,7 @@ import zlib
 from engine import *
 
 THEME = 'spongebob'
-N_ = 294
+N_ = 293
 CX, VX = 30, 150                                                   # the neutral pose: Claude, Plankton
 RX = 128                                                           # where the robot stands
 GRILL = (41, 53)                                                   # the grill's top-left corner

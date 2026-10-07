@@ -9,7 +9,7 @@ import zlib
 from engine import *
 
 THEME = 'dexter'
-N_ = 280
+N_ = 288
 CX, VX = 30, 150                                                   # the neutral pose: Claude, Dee Dee
 MX = 34                                                            # where the mech lands
 

@@ -8,7 +8,7 @@ theme (cai, lfc) needs them."""
 from engine import *
 
 THEME = 'arg'
-N_ = 380
+N_ = 384
 
 CELESTE, WHITE, GOLD = (116,172,223), (244,244,244), (236,190,60)
 FRA = (34,48,120)
@@ -83,7 +83,7 @@ def _fx_ball(d,im,e,f):
 @fx('arg_flashes')
 def _fx_flashes(d,im,e,f):
     """Phones flashing in the stands."""
-    rr=random.Random(f*3)
+    rr=random.Random((f%96)*3)                                       # a 96-frame cycle: the clip loops
     for _ in range(5): d.point((rr.randint(0,W),rr.randint(4,26)),fill=(255,255,255))
 
 @fx('arg_hud')

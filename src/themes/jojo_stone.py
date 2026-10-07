@@ -134,7 +134,7 @@ def search_angle(f):
 @fx('jojos_search')
 def _fx_search(d,im,e,f):
     """The tower's searchlight: a translucent beam swinging over the yard."""
-    a=search_angle(f); x0,y0=100,21; ex=100+a*70
+    a=search_angle(f); x0,y0=100,21; ex=round(100+a*70,6)            # (rounded: the float noise of sin(4pi) shifted a pixel)
     m=Image.new('L',(W,H),0)
     ImageDraw.Draw(m).polygon([(x0-1,y0),(x0+1,y0),(ex+12,GROUND),(ex-12,GROUND)],fill=46)
     im.paste((250,244,200),(0,0),m)

@@ -95,9 +95,7 @@ def _fx_tickets(d,im,e,f):
 
 @fx('tb_bubble')
 def _fx_bubble(d,im,e,f):
-    _,txt,cx,y=e; w=len(txt)*4+5; x=max(1,min(W-w-2,int(cx-w/2))); tx=max(x+3,min(x+w-3,cx))
-    d.rectangle([x,y,x+w,y+9],fill=(250,250,250),outline=(30,30,30)); d.polygon([(tx-2,y+9),(tx+2,y+9),(tx+1,y+13)],fill=(250,250,250))
-    text(d,txt,x+3,y+2,(30,30,30),shadow=None)
+    speech_bubble(d,*e[1:],fill=(250,250,250),ink=(30,30,30))                     # the engine's bubble (engine/people.py)
 
 @fx('tb_plate')
 def _fx_plate(d,im,e,f):
@@ -143,7 +141,7 @@ def clip_service(f):
     s['under'].append(('tb_wall',clock_at(f),0.5 if rush and (f%20)<2 else 0.0))   # it pulses with every second
     s['under'].append(('tb_tickets',n,16<=f<120))
     bposes=['idle']*4
-    if 18<=f<50: s['fx'].append(('tb_bubble',"ORDERS IN!",CX+4,12))
+    if 18<=f<50: s['fx'].append(('tb_bubble',"ORDERS IN!",CX-2,12,CX+4))
     if 50<=f<88:
         for i,(name,x,_) in enumerate(BRIGADE[:3]):
             if (f//10+i)%2==0: s['fx'].append(('tb_bubble',"YES CHEF!",x,18+(i%2)*2))

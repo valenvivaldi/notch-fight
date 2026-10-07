@@ -498,7 +498,7 @@ def clip_pyramid(f):
         if f==68: s['flash']=0.4; s['fc']=(DEAD_X+8,GROUND-22); s['shake']=rshake(2)
         if 68<=f<72: s['fx'].append(('spark',DEAD_X+8,GROUND-24,5))
     if 70<=f<82: cl.update(spr=CL['dash'],flip=True,x=ez(CX,44,(f-70)/12))
-    if f>=82: cl['x']=44
+    if 82<=f<348: cl['x']=44                                        # (then back between them: the neutral pose)
     if 82<=f<156: cl.update(spr=CL[guard_pose(f)] if f%24<18 else hurt(CL['guard']))
     # 4) the clash
     if 76<=f<112:

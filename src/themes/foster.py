@@ -10,7 +10,7 @@ import zlib
 from engine import *
 
 THEME = 'foster'
-N_ = 294
+N_ = 293
 CX, VX = 30, 150                                                   # the neutral pose: Claude, Bloo
 VASE = 96                                                          # the vase on its pedestal
 PERIOD = 6                                                         # frames per paddle-ball hit

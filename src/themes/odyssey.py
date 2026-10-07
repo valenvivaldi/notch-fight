@@ -10,7 +10,7 @@ from engine import *
 THEME = 'odyssey'
 # deadpool's notchverse crossover uses the background, od_fire and od_cyclops: changing them changes that
 # clip too (rebuild with ONLY=odyssey,deadpool).
-N_ = 400
+N_ = 408
 CX, PX = 30, 148                                                    # Odysseus; Polyphemus
 
 SKIN,SKIN_D,INK=(217,119,87),(168,80,54),(40,20,16)
@@ -53,7 +53,7 @@ register_bg(THEME, lambda v: (v+40,v+30,v+20), decor=_cave)
 @fx('od_fire')
 def _fx_fire(d,im,e,f):
     """The fire in the middle of the cave, and its glow."""
-    _,x=e; rr=random.Random(f//2)
+    _,x=e; rr=random.Random((f//2)%17)                               # a 34-frame flicker: it loops
     g=Image.new('L',(W,H),0); ImageDraw.Draw(g).ellipse([x-46,GROUND-40,x+46,GROUND+14],fill=60+(f%3)*8)
     im.paste((255,150,60),(0,0),g.filter(ImageFilter.GaussianBlur(10))); d=ImageDraw.Draw(im)
     for k in range(-2,3): d.line([x+k*3-2,GROUND+1,x+k*3+2,GROUND-1],fill=(70,46,30))
@@ -117,7 +117,7 @@ def _fx_stake(d,im,e,f):
 def _fx_z(d,im,e,f):
     _,x,y=e
     for k in range(3):
-        ph=((f+k*10)%30)/30; text(d,"Z",int(x+ph*8),int(y-ph*14),(220,220,236) if ph<0.7 else (140,140,160))
+        ph=((f+k*11)%34)/34; text(d,"Z",int(x+ph*8),int(y-ph*14),(220,220,236) if ph<0.7 else (140,140,160))
 
 # ---- the Cyclops ------------------------------------------------------------------------------------
 CY_SKIN,CY_D,CY_HAIR,WOOL=(176,140,112),(140,106,84),(54,40,32),(220,212,190)
@@ -129,7 +129,7 @@ def cyclops(d,x,pose,eye,f,k=0.0):
     dy={'sleep':16,'sit':14}.get(pose,0); x=int(x)
     sh_l,sh_r=(x-12,22+dy),(x+11,22+dy)
     hands={'stand':((x-17,42),(x+16,42)),'drink':((x-8,16),(x+16,42)),'blind':((x-7,12),(x-1,15)),
-           'sleep':((x-16,46),(x+14,48)),'sit':((x-28+int(3*math.sin(f*0.4)),48),(x+14,48))}
+           'sleep':((x-16,46),(x+14,48)),'sit':((x-28+int(3*math.sin(2*math.pi*f/17)),48),(x+14,48))}
     if pose=='reach': hl=(int(lerp(x-17,x-62,k)),int(lerp(42,46,k))); hr=(x+16,42)
     else: hl,hr=hands[pose]
     limb(d,sh_r,hr,7); d.ellipse([hr[0]-4,hr[1]-4,hr[0]+4,hr[1]+4],fill=CY_D,outline=OUT)   # the back arm

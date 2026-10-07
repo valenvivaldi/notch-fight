@@ -1,5 +1,5 @@
-"""src/build.py partial builds (ONLY=<theme|theme__clip>[,...]): only the named clips and the transitions
-that touch their themes are rendered; everything else in build/ is left as it is.
+"""src/build.py partial builds (ONLY=<theme|theme__clip>[,...]): only the named clips and their themes'
+transition halves (<theme>__out, <theme>__in) are rendered; everything else in build/ is left as it is.
 Runs on a temporary copy of src/ with two tiny synthetic themes, so it takes seconds."""
 import os, shutil, subprocess, sys, tempfile, time, unittest
 
@@ -49,7 +49,9 @@ class PartialBuild(unittest.TestCase):
 
     def test_a_full_build_lists_every_clip_as_built(self):
         self.assertEqual(sorted(self.built()), ['ta__one', 'tb__two'])
-        self.assertTrue(os.path.isdir(os.path.join(self.out, 'transitions', 'ta__tb')))
+        for d in ('ta__out', 'ta__in', 'tb__out', 'tb__in'):            # two halves per theme, none per pair
+            self.assertTrue(os.path.isdir(os.path.join(self.out, 'transitions', d)), d)
+        self.assertEqual(sorted(os.listdir(os.path.join(self.out, 'transitions'))), ['ta__in', 'ta__out', 'tb__in', 'tb__out'])
 
     def test_only_a_theme_rebuilds_just_it_and_its_transitions(self):
         before = mtimes(self.out); time.sleep(0.05)
@@ -57,7 +59,7 @@ class PartialBuild(unittest.TestCase):
         after = mtimes(self.out)
         self.assertEqual(set(before), set(after))                       # nothing removed, nothing extra
         changed = {p for p in after if after[p] != before[p]}
-        self.assertTrue(all(p.startswith(('clips/tb__', 'transitions/ta__tb', 'transitions/tb__ta')) for p in changed))
+        self.assertTrue(all(p.startswith(('clips/tb__', 'transitions/tb__')) for p in changed))
         self.assertTrue(any(p.startswith('clips/tb__two/') for p in changed))
         self.assertFalse(any(p.startswith('clips/ta__') for p in changed))
         self.assertEqual(self.built(), ['tb__two'])
@@ -66,11 +68,31 @@ class PartialBuild(unittest.TestCase):
         r = build(self.src, self.out, 'ta__one'); self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(self.built(), ['ta__one'])
 
-    def test_a_new_theme_gets_its_clip_and_transitions_to_the_others(self):
+    def test_a_new_theme_gets_its_clip_and_its_own_transition_halves(self):
         add_theme(self.src, 'tc', 'three')
         r = build(self.src, self.out, 'tc'); self.assertEqual(r.returncode, 0, r.stderr)
-        for d in ('clips/tc__three', 'transitions/tc__ta', 'transitions/ta__tc', 'transitions/tb__tc'):
+        for d in ('clips/tc__three', 'transitions/tc__out', 'transitions/tc__in'):
             self.assertTrue(os.path.isdir(os.path.join(self.out, d)), d)
+
+    def test_a_new_theme_does_not_need_the_others_frames(self):
+        shutil.rmtree(os.path.join(self.out, 'clips', 'ta__one'))      # another theme's keyframe is gone
+        add_theme(self.src, 'tc', 'three')
+        r = build(self.src, self.out, 'tc'); self.assertEqual(r.returncode, 0, r.stderr)
+
+    def test_old_per_pair_transitions_are_cleared(self):
+        os.makedirs(os.path.join(self.out, 'transitions', 'ta__tb'))
+        r = build(self.src, self.out, 'ta'); self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertFalse(os.path.exists(os.path.join(self.out, 'transitions', 'ta__tb')))
+
+    def test_every_folder_is_a_pack_and_its_count(self):
+        from PIL import Image
+        for top, n in (('clips', 4), ('transitions', 11)):               # the synthetic clips are 4 frames
+            for dd in os.listdir(os.path.join(self.out, top)):
+                d = os.path.join(self.out, top, dd)
+                self.assertEqual(sorted(f for f in os.listdir(d) if not f.startswith('.')), ['count', 'frames.png'], dd)
+                self.assertEqual(int(open(os.path.join(d, 'count')).read()), n, dd)
+                sheet = Image.open(os.path.join(d, 'frames.png'))
+                self.assertEqual(sheet.size, (185 * min(10, n), 64 * ((n + 9) // 10)), dd)
 
     def test_an_unknown_name_fails_and_lists_the_known_ones(self):
         r = build(self.src, self.out, 'nope')

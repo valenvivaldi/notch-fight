@@ -53,7 +53,7 @@ register_bg(THEME, lambda v: (v+30,v+28,v+40), decor=_dungeon)
 
 @fx('dd_torch')
 def _fx_torch(d,im,e,f):
-    _,x=e; rr=random.Random(f//2+x)
+    _,x=e; rr=random.Random((f//2)%30+x)                              # a 60-frame flicker: it loops
     g=Image.new('L',(W,H),0); ImageDraw.Draw(g).ellipse([x-22,0,x+22,44],fill=60)
     im.paste((255,170,80),(0,0),g.filter(ImageFilter.GaussianBlur(8))); d=ImageDraw.Draw(im)
     for _ in range(3):

@@ -11,14 +11,16 @@ final class App: NSObject, NSApplicationDelegate {
     var win: NotchPanel!
     let art = CALayer()
     // Clips are grouped by theme (dir name "<theme>__<clip>"). Clips of one theme share a
-    // loop keyframe and chain seamlessly; switching theme plays transitions/<from>__<to>.
-    // Frames load lazily: only the directory names are read at launch (tens of thousands of PNGs
-    // would delay the drop by seconds); a clip's frames are read when it is queued, and a background
-    // pass warms the cache for the clips.
+    // loop keyframe and chain seamlessly; switching theme plays transitions/<from>__out, then <to>__in.
+    // Frames load lazily: only the directory names are read at launch. A clip's frames are read when
+    // it is queued, from its frames.png (all of them packed in one image), decoded once and cut into
+    // frames; only the last few clips stay in memory.
     var clipDirs: [String: URL] = [:]               // "<theme>__<clip>" -> frames directory
     var allowed: [String] = []                      // the clips in the rotation (config selection)
-    var transDirs: [String: URL] = [:]              // "<from>__<to>" -> frames directory
+    var transDirs: [String: URL] = [:]              // "<theme>__out" / "<theme>__in" -> frames directory
     var cache: [String: [CGImage]] = [:]            // "c:<clip>" / "t:<transition>" -> frames
+    var cacheOrder: [String] = []                   // oldest first: the cache keeps the last `cacheSize`
+    let cacheSize = 6
     var queue: [[CGImage]] = []
     var theme = ""
     // Per-launch shuffle bag: forced clips first, then every other clip in random order;
@@ -128,25 +130,41 @@ final class App: NSObject, NSApplicationDelegate {
         Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in self?.watchSessions() }
         if !preview { Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.watchGate() } }
         animate(to: bodyH, duration: 0.55, spring: true)
-        preload()
-    }
-
-    // Warm the cache with every clip in the background (transitions stay on demand: they are many and short).
-    func preload() {
-        let todo = clipDirs.filter { cache["c:" + $0.key] == nil }
-        DispatchQueue.global(qos: .utility).async {
-            for (name, dir) in todo {
-                let f = Self.loadFrames(dir)
-                DispatchQueue.main.async { if self.cache["c:" + name] == nil { self.cache["c:" + name] = f } }
-            }
-        }
     }
 
     func frames(_ key: String, _ dir: URL?) -> [CGImage]? {
-        if let c = cache[key] { return c.isEmpty ? nil : c }
+        if let c = cache[key] {
+            cacheOrder.removeAll { $0 == key }; cacheOrder.append(key)
+            return c.isEmpty ? nil : c
+        }
         guard let dir else { return nil }
-        let f = Self.loadFrames(dir); cache[key] = f
+        let f = Self.loadFrames(dir); store(key, f)
         return f.isEmpty ? nil : f
+    }
+
+    func store(_ key: String, _ f: [CGImage]) {
+        cache[key] = f; cacheOrder.removeAll { $0 == key }; cacheOrder.append(key)
+        while cacheOrder.count > cacheSize { cache[cacheOrder.removeFirst()] = nil }   // (playing ones are held by the queue)
+    }
+
+    // As soon as a clip starts, pick the next one and decode its frames (and the transition halves, on a
+    // change of theme) in the background, so the switch never waits on a PNG.
+    var preparing = false
+    func prepareNext() {
+        guard queue.isEmpty, !preparing, let next = pickNext() else { return }
+        let t = themeOf(next)
+        var keys: [(String, URL?)] = [("c:" + next, clipDirs[next])]
+        if !theme.isEmpty && t != theme { keys += [("t:\(theme)__out", transDirs["\(theme)__out"]), ("t:\(t)__in", transDirs["\(t)__in"])] }
+        let todo = keys.filter { cache[$0.0] == nil }
+        preparing = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            let loaded = todo.compactMap { k, dir in dir.map { (k, Self.loadFrames($0)) } }
+            DispatchQueue.main.async {
+                for (k, f) in loaded { self.store(k, f) }
+                self.preparing = false
+                self.enqueue(next)                                   // from the cache now
+            }
+        }
     }
 
     func rect(height h: CGFloat) -> NSRect {
@@ -215,12 +233,34 @@ final class App: NSObject, NSApplicationDelegate {
         return Dictionary(uniqueKeysWithValues: names.filter { !$0.hasPrefix(".") }.map { ($0, root.appendingPathComponent($0)) })
     }
 
+    // A folder's frames: its frames.png cut into `count` frames (a grid, row by row, as build.py packs
+    // it), decoded once into memory so every frame is a cheap crop; an older build's NNN.png otherwise.
     static func loadFrames(_ dir: URL) -> [CGImage] {
+        let raw = (try? String(contentsOf: dir.appendingPathComponent("count"), encoding: .utf8)) ?? ""
+        if let n = Int(raw.trimmingCharacters(in: .whitespacesAndNewlines)), n > 0,
+           let src = CGImageSourceCreateWithURL(dir.appendingPathComponent("frames.png") as CFURL, nil),
+           let packed = CGImageSourceCreateImageAtIndex(src, 0, nil) {
+            let sheet = decoded(packed) ?? packed
+            let cols = min(sheetCols, n), rows = (n + cols - 1) / cols
+            let w = sheet.width / cols, h = sheet.height / rows
+            return (0..<n).compactMap { i in sheet.cropping(to: CGRect(x: (i % cols) * w, y: (i / cols) * h, width: w, height: h)) }
+        }
         let files = ((try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []).filter { $0.hasSuffix(".png") }.sorted()
         return files.compactMap { f -> CGImage? in
             guard let src = CGImageSourceCreateWithURL(dir.appendingPathComponent(f) as CFURL, nil) else { return nil }
             return CGImageSourceCreateImageAtIndex(src, 0, nil)
         }
+    }
+
+    static let sheetCols = 10                       // build.py's SHEET_COLS
+
+    /// The image drawn once into a bitmap: its crops then share that memory instead of decoding the PNG again.
+    static func decoded(_ img: CGImage) -> CGImage? {
+        let space = img.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB)!
+        guard let ctx = CGContext(data: nil, width: img.width, height: img.height, bitsPerComponent: 8, bytesPerRow: 0,
+                                  space: space, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
+        ctx.draw(img, in: CGRect(x: 0, y: 0, width: img.width, height: img.height))
+        return ctx.makeImage()
     }
 
     // `nf preview` (--only): just the forced clips, once, then close; no rotation, no gate, no sessions.
@@ -301,8 +341,10 @@ final class App: NSObject, NSApplicationDelegate {
 
     func enqueue(_ name: String) {
         guard let clipFrames = frames("c:" + name, clipDirs[name]) else { return }
-        let t = themeOf(name), tk = "\(theme)__\(t)"
-        if !theme.isEmpty && t != theme, let tr = frames("t:" + tk, transDirs[tk]) { queue.append(tr) }
+        let t = themeOf(name)
+        if !theme.isEmpty && t != theme {                             // the iris closes on this theme, opens on the next
+            for tk in ["\(theme)__out", "\(t)__in"] { if let tr = frames("t:" + tk, transDirs[tk]) { queue.append(tr) } }
+        }
         visitCount = (t == theme) ? visitCount + 1 : 1
         theme = t; lastPlayed = name
         remaining.removeAll { $0 == name }
@@ -311,9 +353,11 @@ final class App: NSObject, NSApplicationDelegate {
 
     func tick() {
         if idx >= current.count {
+            if preparing && queue.isEmpty { return }                  // the next one is nearly ready: hold this frame
             if queue.isEmpty, let next = pickNext() { enqueue(next) }
             guard !queue.isEmpty else { close(); return }             // only forced clips, and they are done
             current = queue.removeFirst(); idx = 0
+            prepareNext()
         }
         art.contents = current[idx]
         idx += 1

@@ -52,8 +52,8 @@ def _fx_star(d,im,e,f):
     im.paste(STAR,(0,0),L.filter(ImageFilter.GaussianBlur(3)))
     r=5; d.ellipse([cx-r,cy-r,cx+r,cy+r],fill=tuple(int(lerp(60,c,b)) for c in STAR_HI))
     for k in range(20):                                                                     # the Petrova line
-        x=cx-2-k*1.4; y=cy+6+k*0.8+math.sin(f*0.12+k*0.5)
-        if x>129 and (k+f//3)%3: d.point((int(x),int(y)),fill=(int(160*b)+40,40,50))
+        x=cx-2-k*1.4; y=cy+6+k*0.8+math.sin(2*math.pi*f/50+k*0.5)
+        if x>129 and (k+f//4)%3: d.point((int(x),int(y)),fill=(int(160*b)+40,40,50))
 
 @fx('phm_tint')
 def _fx_tint(d,im,e,f):
@@ -66,7 +66,7 @@ def _fx_screens(d,im,e,f):
     _,bad=e
     for x0 in (6,40):
         c=(220,80,80) if bad else (110,230,140)
-        pts=[(x0+2+i,15+int(4*math.sin((i+f*0.6+x0)*0.4))*(0.3 if bad else 1)) for i in range(27)]
+        pts=[(x0+2+i,15+int(4*math.sin((i+x0)*0.4+2*math.pi*f/25))*(0.3 if bad else 1)) for i in range(27)]
         d.line(pts,fill=c)
 
 @fx('phm_rocky')
@@ -215,7 +215,7 @@ def closeup_microscope(t,f):
 # ---------------------------------------------------------------- clip 1: rocky
 def clip_rocky(f):
     s=scene(f,THEME)
-    s['under'].append(('phm_star',1.0)); s['fx'].append(('phm_screens',False))
+    s['under'].append(('phm_star',1.0)); s['fx'].append(('phm_screens',False)); s['fx'].append(('phm_bench',0))   # the lab, as astrophage has it
     gx,gpose,gflip=40,guard_pose(f),False
     tunnel=0; rocky=None
     if 14<=f<50: s['under'].append(('phm_ship',lerp(182,150,(f-14)/36),26,lerp(0.4,1,(f-14)/36)))

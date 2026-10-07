@@ -12,6 +12,8 @@ frames go into chunks in <out dir>: 000.cells, 001.cells, ... holding chunk_fram
     python3 scripts/mod_cells.py <frames dir> <columns> <rows> <out dir> [quad|sextant|octant]"""
 import os, shutil, sys
 from PIL import Image
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import frames                                                   # a folder's frames, packed or loose
 
 # the quadrant character for each mask of foreground pixels: bit 1 top left, 2 top right,
 # 4 bottom left, 8 bottom right
@@ -76,12 +78,12 @@ def chunk_frames(columns, rows):
 
 def main(src, columns, rows, out, glyphs='quad'):
     h, table = GLYPHS[glyphs]
-    names = sorted(n for n in os.listdir(src) if n.endswith('.png'))
+    ims = frames.load(src)
     per = chunk_frames(columns, rows)
     tmp = out+'.tmp'; shutil.rmtree(tmp, ignore_errors=True); os.makedirs(tmp)
     data = bytearray(); memo = {}
-    for k, n in enumerate(names):
-        im = Image.open(os.path.join(src, n)).convert('RGB').resize((columns*2, rows*h), Image.BOX)
+    for k, im in enumerate(ims):
+        im = im.resize((columns*2, rows*h), Image.BOX)
         px = im.load()
         for y in range(0, rows*h, h):
             for x in range(0, columns*2, 2):
@@ -89,10 +91,10 @@ def main(src, columns, rows, out, glyphs='quad'):
                 if key not in memo:
                     cp, f, b = cell(key, table); memo[key] = cp.to_bytes(3, 'little')+bytes(f)+bytes(b)
                 data += memo[key]
-        if (k+1) % per == 0 or k+1 == len(names):
+        if (k+1) % per == 0 or k+1 == len(ims):
             open(os.path.join(tmp, f'{k//per:03d}.cells'), 'wb').write(data); data = bytearray()
     shutil.rmtree(out, ignore_errors=True); os.replace(tmp, out)   # the mod never reads half a pack
-    print(len(names))
+    print(len(ims))
 
 if __name__ == '__main__':
     main(sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4], *sys.argv[5:6])

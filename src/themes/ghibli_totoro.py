@@ -7,7 +7,7 @@ leaves her a bundle of acorns wrapped in leaves and boards; the Catbus runs off 
 from engine import *
 
 THEME = 'ghibli-totoro'
-N_ = 320
+N_ = 336
 
 INK = (26,30,34)
 RAIN = (150,170,190)
@@ -56,19 +56,19 @@ def _fx_lamp(d,im,e,f):
 @fx('tot_rain')
 def _fx_rain(d,im,e,f):
     """Slanted rain and ripples in the puddles; dens 0..1."""
-    _,dens=e; rr=random.Random(f*7)
+    _,dens=e; rr=random.Random((f%42)*7)                       # a 42-frame cycle: the clip loops
     for _ in range(int(46*dens)):
         x=rr.randint(-10,W); y=rr.randint(-4,H); d.line([x,y,x-2,y+5],fill=RAIN)
     for x0,w in ((20,18),(104,26),(150,14)):
         for k in range(2):
-            ph=((f*0.08+k*0.5+x0*0.01)%1); r=1+ph*4
+            ph=((f%16)/16+k*0.5+x0*0.01)%1; r=1+ph*4
             if dens>0.2: d.ellipse([x0+w//2-r+k*4,GROUND-2-r*0.3,x0+w//2+r+k*4,GROUND-2+r*0.3],outline=(110,130,150) if ph<0.6 else (80,96,112))
 
 @fx('tot_fireflies')
 def _fx_fireflies(d,im,e,f):
     for i in range(6):
-        x=(20+i*31+math.sin(f*0.03+i)*8)%W; y=24+math.sin(f*0.05+i*1.7)*8+i%3*6
-        if (f//4+i)%5: d.point((int(x),int(y)),fill=FIREFLY_HI if (f//3+i)%3==0 else FIREFLY)
+        x=(20+i*31+math.sin(2*math.pi*f/N_+i)*8)%W; y=24+math.sin(4*math.pi*f/N_+i*1.7)*8+i%3*6
+        if (f//4+i)%6: d.point((int(x),int(y)),fill=FIREFLY_HI if (f//2+i)%4==0 else FIREFLY)
 
 @fx('tot_umbrella')
 def _fx_umbrella(d,im,e,f):

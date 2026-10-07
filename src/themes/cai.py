@@ -8,7 +8,7 @@ from engine import *
 from themes.arg import PLAYER, DIVE, draw_goal, CELESTE, WHITE      # the same pitch and players as arg
 
 THEME = 'cai'
-N_ = 378
+N_ = 377
 CX = 40                                                             # the loop keyframe position
 RED, RED_D, BLUE = (206,22,36), (140,12,24), (34,44,120)
 HUD_BG, HUD_INK, GOLD = (16,16,22), (236,236,236), (236,190,60)

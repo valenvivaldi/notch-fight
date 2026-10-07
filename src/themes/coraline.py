@@ -9,7 +9,7 @@ from engine import *
 from themes.spidey import twos      # characters on twos, like the Spider-Verse look (changing it in spidey changes this clip)
 
 THEME = 'coraline'
-N_ = 330
+N_ = 336
 
 INK = (20,16,16)
 # Coraline: yellow raincoat, blue hair with the dragonfly clip, yellow boots
@@ -40,6 +40,7 @@ BELDAM=poses(S([
 
 def wobble(g,who):
     """Stop-motion: a 1 px nudge on some poses, as if the puppet was moved by hand."""
+    g%=N_                                                            # the same nudges every loop
     return (zlib.crc32(f'{who}{g}'.encode())%5==0)*(1 if (g//2)%2 else -1)
 
 # ---------------------------------------------------------------- the room, in three worlds
@@ -77,7 +78,7 @@ def _fx_room(d,im,e,f):
 
 @fx('cor_rain')
 def _fx_rain(d,im,e,f):
-    rr=random.Random(f*5)
+    rr=random.Random((f%48)*5)                                       # a 48-frame cycle: it loops
     for _ in range(8):
         x=rr.randint(119,149); y=rr.randint(9,30); d.line([x,y,x-1,y+3],fill=(140,160,200))
 

@@ -9,7 +9,7 @@ import zlib
 from engine import *
 
 THEME = 'ppg'
-N_ = 260
+N_ = 257
 CX, VX = 30, 150                                                   # the neutral pose: Claude, Mojo
 SKY = 26                                                           # hover height (feet)
 

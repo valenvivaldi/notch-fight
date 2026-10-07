@@ -10,7 +10,7 @@ from PIL import ImageChops
 from engine import *
 
 THEME = 'cyberpunk'
-N_ = 281                                                           # frame 280 is frame 0 again (rain, neon, breathing)
+N_ = 280                                                           # frame 280 would be frame 0 again (rain, neon, breathing): it loops
 CX, VX = 30, 150                                                   # the neutral pose: V, Royce
 YEL = (252,238,10)                                                 # the HUD yellow
 CYAN = (60,240,255)

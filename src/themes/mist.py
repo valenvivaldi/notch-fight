@@ -63,27 +63,30 @@ FOG=_fog_mask()
 
 @fx('mist_fog')
 def _fx_fog(d,im,e,f):
-    """The mists drifting left to right; density 0..1."""
-    _,dens=e; off=int(f*0.6)%W
+    """The mists drifting left to right; density 0..1. P: the clip's length (one crossing per loop)."""
+    _,dens,*P=e; P=P[0] if P else N_; off=int((f%P)*W/P)
     band=FOG.crop((W-off,0,W*2-off,H)).point(lambda v: int(v*dens))
     im.paste((226,230,240),(0,0),band)
 
 @fx('mist_ash')
 def _fx_ash(d,im,e,f):
-    """Ash falling on Luthadel, forever."""
+    """Ash falling on Luthadel, forever. P: the clip's length (each flake falls a whole number of times
+    per loop, so it loops)."""
+    _,*P=e; P=P[0] if P else N_
     rr=random.Random(77)
     for i in range(22):
-        x0=rr.randint(0,W); sp=rr.uniform(0.3,0.7); ph=rr.randint(0,H)
-        y=(ph+f*sp)%H; x=(x0+math.sin(f*0.05+i)*3)%W
+        x0=rr.randint(0,W); k=rr.randint(2,4); ph=rr.randint(0,H)
+        y=(ph+(f%P)*H*k/P)%H; x=(x0+math.sin(4*math.pi*f/P+i)*3)%W
         d.point((int(x),int(y)),fill=ASH if i%3 else (110,106,100))
 
 @fx('mist_cloak')
 def _fx_cloak(d,im,e,f):
     """Vin's mistcloak: tassels from the shoulders, trailing behind her (sw: -1..1 sideways motion)."""
-    _,x,feet,flip,sw=e; back=1 if flip else -1
+    _,x,feet,flip,sw,*P=e; back=1 if flip else -1; P=P[0] if P else N_
+    m=max(1,round(P*0.35/(2*math.pi)))                               # about the old sway, a whole number per loop
     for k in range(6):
         sx=x+back*(1+k)-(0 if flip else 1); sy=feet-9
-        L=7+k%2; wav=math.sin(f*0.35+k*0.9)
+        L=7+k%2; wav=math.sin(2*math.pi*m*f/P+k*0.9)
         ex=sx+back*(2+abs(sw)*5)+wav; ey=sy+L-abs(sw)*3
         d.line([sx,sy,ex,ey],fill=(96,100,110) if k%2 else (120,124,134))
 

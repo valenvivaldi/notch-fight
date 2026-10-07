@@ -10,7 +10,7 @@ from PIL import ImageChops
 from engine import *
 
 THEME = 'spidey'
-N_ = 330
+N_ = 329
 
 VENOM, VENOM_HI = (255,210,60), (255,250,200)
 CAPTION = (255,214,80)

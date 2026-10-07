@@ -11,7 +11,7 @@ the reward card, YOU GOT A NEW PLANT! (the Claudeshooter); back to the lawn's ne
 from engine import *
 
 THEME = 'pvz'
-N_ = 400
+N_ = 420
 CX = 26                                   # Claude by the porch in the neutral pose
 MOWER_X = 9
 SUNF_X, PEA_X, NUT_X, CHERRY_X = 44, 60, 96, 113
@@ -172,7 +172,7 @@ register_bg(THEME, lambda v: (v+30, v+70, v+10), decor=_lawn)
 # ---- effects -------------------------------------------------------------------------------------
 def _sun(d, x, y, r, f):
     for k in range(8):
-        a = k*math.pi/4+f*0.12; d.line([x, y, x+math.cos(a)*(r+2), y+math.sin(a)*(r+2)], fill=(255,236,120))
+        a = k*math.pi/4+f*math.pi/24; d.line([x, y, x+round(math.cos(a)*(r+2), 6), y+round(math.sin(a)*(r+2), 6)], fill=(255,236,120))   # (rounded: float noise)
     d.ellipse([x-r, y-r, x+r, y+r], fill=(255,214,40), outline=(232,150,20))
     d.point((x-1, y-1), fill=(255,250,210))
 

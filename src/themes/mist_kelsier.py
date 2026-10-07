@@ -134,7 +134,7 @@ def inq_state(f):
 
 def clip_survivor(f):
     s=scene(f,THEME)
-    s['under'].append(('mist_ash',))
+    s['under'].append(('mist_ash',N_))
     kx,ky,kpose=kel_state(f)
     acts=[]
     # the crowd: cheers at the punch, freezes at the spear, then the hands go up one by one
@@ -196,16 +196,16 @@ def clip_survivor(f):
         solid=0 if f<336 else min(1,(f-336)/14)
         if solid<1: acts.append(actor(KEL[guard_pose(f)],CX,pal=KPAL,alpha=0.7*k*(1-solid),tint=(232,236,246)))
         if solid>0:
-            s['under'].append(('mist_cloak',CX,GROUND,False,0))
+            s['under'].append(('mist_cloak',CX,GROUND,False,0,N_))
             acts.append(actor(KEL[guard_pose(f)],CX,pal=KPAL,alpha=solid))
     show_kel=f<160 or f>=352
     if 160<=f<238: show_kel=True
     if show_kel:
         if 160<=f<238: acts.append(actor(KEL['hurt'],kx,ky,pal=KPAL))
         else:
-            s['under'].append(('mist_cloak',kx,ky,False,1 if kpose=='dash' else 0))
+            s['under'].append(('mist_cloak',kx,ky,False,1 if kpose=='dash' else 0,N_))
             acts.append(actor(KEL[kpose],kx,ky,pal=KPAL))
-    if dens>0: s['fx'].append(('mist_fog',dens))
+    if dens>0: s['fx'].append(('mist_fog',dens,N_))
     s['actors']=acts
     return s
 

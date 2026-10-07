@@ -9,3 +9,4 @@ from .hud import *
 from .fx import *
 from .render import *
 from .logos import *
+from .people import *

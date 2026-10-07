@@ -8,7 +8,7 @@ The Sentinel drone lives here for the other X-Men '97 themes."""
 from engine import *
 
 THEME = 'xmen-nightcrawler'
-N_ = 300
+N_ = 301
 CX = 30                                                             # the loop keyframe position
 
 SMOKE = ((110,70,170),(76,46,128),(156,116,214))

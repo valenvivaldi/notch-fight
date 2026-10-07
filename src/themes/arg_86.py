@@ -219,14 +219,10 @@ WEAVE=((40,1.0),(80,0.7),(128,0.6),(150,0.88),(188,0.7),(210,0.32),(240,0.55),(2
 
 def feet_of(z): return int(lerp(46,GROUND,z))
 
-_small={}
+from engine import people
 def shrink(spr,k=0.75):
-    """A 3/4-size copy of a sprite grid (nearest sampling), cached."""
-    key=tuple(spr)
-    if key not in _small:
-        h,w=len(spr),len(spr[0]); nh,nw=max(1,round(h*k)),max(1,round(w*k))
-        _small[key]=S([''.join(spr[min(h-1,int(y/k))][min(w-1,int(x/k))] for x in range(nw)) for y in range(nh)])
-    return _small[key]
+    """A 3/4-size copy of a sprite grid (the engine's, at 3/4)."""
+    return people.shrink(spr,k)
 
 def place(spr,wx,z,cam,flip,pal,alpha=1.0,lift=0):
     """An actor at world x / depth z: parallax, size, fade and feet line from the depth."""

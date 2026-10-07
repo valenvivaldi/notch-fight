@@ -71,5 +71,38 @@ class ModCells(unittest.TestCase):
         self.assertEqual(sorted(os.listdir(out)), ['000.cells', '001.cells', '002.cells'])
         self.assertTrue(all(os.path.getsize(os.path.join(out, n)) <= 4194304 for n in os.listdir(out)))
 
+    def test_a_packed_clip_reads_the_same_as_loose_frames(self):
+        frames = [Image.new('RGB', (4, 4), (i * 40, 0, 0)) for i in range(13)]
+        tmp = tempfile.mkdtemp()                                  # build.py's pack: 10 columns, row by row
+        sheet = Image.new('RGB', (4 * 10, 4 * 2))
+        for i, im in enumerate(frames): sheet.paste(im, ((i % 10) * 4, (i // 10) * 4))
+        sheet.save(os.path.join(tmp, 'frames.png')); open(os.path.join(tmp, 'count'), 'w').write('13\n')
+        out = os.path.join(tmp, 'clip')
+        subprocess.run([sys.executable, SCRIPT, tmp, '2', '2', out], check=True, capture_output=True)
+        packed = b''.join(open(os.path.join(out, n), 'rb').read() for n in sorted(os.listdir(out)))
+        self.assertEqual(packed, pack(frames, 2, 2))
+
+class Frames(unittest.TestCase):
+    """scripts/frames.py: a folder's frames, packed (frames.png + count) or loose (NNN.png)."""
+    def setUp(self):
+        sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+        import frames; self.frames = frames
+        self.ims = [Image.new('RGB', (6, 3), (i * 20, 255 - i * 20, 7)) for i in range(12)]
+        self.src = tempfile.mkdtemp()
+        sheet = Image.new('RGB', (6 * 10, 3 * 2))
+        for i, im in enumerate(self.ims): sheet.paste(im, ((i % 10) * 6, (i // 10) * 3))
+        sheet.save(os.path.join(self.src, 'frames.png')); open(os.path.join(self.src, 'count'), 'w').write('12\n')
+
+    def test_load_cuts_the_pack_in_order(self):
+        self.assertEqual([im.tobytes() for im in self.frames.load(self.src)], [im.tobytes() for im in self.ims])
+
+    def test_unpack_writes_numbered_frames_and_skips_when_fresh(self):
+        out = os.path.join(tempfile.mkdtemp(), 'clip')
+        self.frames.unpack(self.src, out)
+        self.assertEqual(sorted(os.listdir(out)), [f'{i:03d}.png' for i in range(12)])
+        t = os.stat(os.path.join(out, '000.png')).st_mtime_ns
+        self.frames.unpack(self.src, out)                          # up to date: left alone
+        self.assertEqual(os.stat(os.path.join(out, '000.png')).st_mtime_ns, t)
+
 if __name__ == '__main__':
     unittest.main()

@@ -27,27 +27,36 @@ PY
   echo "First clip set to $FIRST (~/.config/notch-fight/config.json)"
 fi
 
-rm -rf "$APP"; mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+# The app is updated in place, not rebuilt: rsync copies each folder's frames.png + count (and the
+# .default-off marks) that changed, and drops what's gone (the loose NNN.png of an older build too). The Swift is compiled only when its source is newer than the binary.
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$ROOT/app/Info.plist" "$APP/Contents/"
-# APFS clones (cp -c) share the frames instead of copying ~45k files: ~3x faster; plain copy elsewhere
-cp -cR "$OUT/clips" "$OUT/transitions" "$APP/Contents/Resources/" 2>/dev/null \
-  || cp -R "$OUT/clips" "$OUT/transitions" "$APP/Contents/Resources/"
+for d in clips transitions; do
+  rsync -a --delete --delete-excluded --include='*/' --include='frames.png' --include='count' --include='.default-off' \
+    --exclude='*' "$OUT/$d/" "$APP/Contents/Resources/$d/"
+done
 # pin the deployment target: some toolchains default to a macOS newer than the running one (LaunchServices error -10825)
-swiftc -O -target "$(uname -m)-apple-macos13.0" "$ROOT/app/main.swift" -o "$APP/Contents/MacOS/NotchFight"
+swift() { [[ -x "$2" && "$2" -nt "$1" ]] || swiftc -O -target "$(uname -m)-apple-macos13.0" "$1" -o "$2"; }
+swift "$ROOT/app/main.swift" "$APP/Contents/MacOS/NotchFight"
 codesign -s - --force "$APP" >/dev/null 2>&1
 
 # the menu bar icon (nf menu on): a tiny separate app, so it can stay up while the panel comes and goes
 MENU="$OUT/NotchFightMenu.app"
-rm -rf "$MENU"; mkdir -p "$MENU/Contents/MacOS"
+mkdir -p "$MENU/Contents/MacOS"
 cp "$ROOT/app/MenuInfo.plist" "$MENU/Contents/Info.plist"
-swiftc -O -target "$(uname -m)-apple-macos13.0" "$ROOT/app/menu.swift" -o "$MENU/Contents/MacOS/NotchFightMenu"
-codesign -s - --force "$MENU" >/dev/null 2>&1
+if [[ ! -x "$MENU/Contents/MacOS/NotchFightMenu" || "$ROOT/app/menu.swift" -nt "$MENU/Contents/MacOS/NotchFightMenu" ]]; then
+  swift "$ROOT/app/menu.swift" "$MENU/Contents/MacOS/NotchFightMenu"
+  codesign -s - --force "$MENU" >/dev/null 2>&1
+fi
 
 if [[ "${GIFS:-0}" == "1" ]]; then   # GIFS=1 ./build.sh refreshes media/clips previews
-  while read -r n; do [[ -z "$n" ]] && continue; d="$OUT/clips/$n/"   # only the clips this run rendered
-    ffmpeg -y -loglevel error -framerate 20 -i "$d%03d.png" \
+  tmp="$(mktemp -d)"
+  while read -r n; do [[ -z "$n" ]] && continue; d="$tmp/$n"          # only the clips this run rendered
+    python3 "$ROOT/scripts/frames.py" unpack "$OUT/clips/$n" "$d"
+    ffmpeg -y -loglevel error -framerate 20 -i "$d/%03d.png" \
       -vf "scale=iw*2:ih*2:flags=neighbor,split[a][b];[a]palettegen=max_colors=128[p];[b][p]paletteuse=dither=none" \
       -loop 0 "$ROOT/media/clips/$n.gif"
   done < "$OUT/.built"
+  rm -rf "$tmp"
 fi
 echo "Built $APP"

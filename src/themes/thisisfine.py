@@ -101,10 +101,7 @@ def _fx_smoke(d,im,e,f):
 
 @fx('tf_bubble')
 def _fx_bubble(d,im,e,f):
-    _,lines,cx,y=e; lines=[lines] if isinstance(lines,str) else lines
-    w=max(len(l) for l in lines)*4+5; h=len(lines)*7+3; x=max(1,min(W-w-2,int(cx-w/2))); tx=max(x+3,min(x+w-3,cx))
-    d.rectangle([x,y,x+w,y+h],fill=(250,250,250),outline=(30,30,30)); d.polygon([(tx-2,y+h),(tx+2,y+h),(tx+1,y+h+4)],fill=(250,250,250))
-    for i,l in enumerate(lines): text(d,l,x+3,y+2+i*7,(30,30,30),shadow=None)
+    speech_bubble(d,*e[1:],fill=(250,250,250),ink=(30,30,30))                     # the engine's bubble (engine/people.py)
 
 # ---- close-up -----------------------------------------------------------------------------------------
 def closeup_fine(t,f):

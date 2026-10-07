@@ -184,9 +184,10 @@ def _fx_city(d,im,e,f):
     crosses the viaduct once per clip (n = the clip length, so the loop is seamless)."""
     _,n,ruined=e
     if ruined:                                                      # a dead screen and burning windows
-        rr=random.Random(f//2)
+        g=f%n                                                       # frame n is frame 0: the noise and fire loop too
+        rr=random.Random(g//2)
         for _ in range(20): d.point((rr.randint(4,32),rr.randint(8,26)),fill=rr.choice([(60,60,70),(30,30,40),(120,120,130)]))
-        FX['fire'](d,im,('fire',12,24,2),f); FX['fire'](d,im,('fire',100,HZ+1,2),f); FX['fire'](d,im,('fire',180,28,2),f)
+        FX['fire'](d,im,('fire',12,24,2),g); FX['fire'](d,im,('fire',100,HZ+1,2),g); FX['fire'](d,im,('fire',180,28,2),g)
         return
     k=(f*6//n)%3
     if k==0:

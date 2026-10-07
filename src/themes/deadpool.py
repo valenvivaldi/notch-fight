@@ -107,10 +107,7 @@ def _fx_box(d,im,e,f):
 
 @fx('dp_bubble')
 def _fx_bubble(d,im,e,f):
-    """A white speech balloon (Wolverine), tail down towards the speaker."""
-    _,txt,cx,y=e; w=len(txt)*4+5; x=max(1,min(W-w-2,int(cx-w/2))); cx=max(x+3,min(x+w-3,cx))
-    d.rectangle([x,y,x+w,y+9],fill=(250,250,250),outline=INK); d.polygon([(cx-2,y+9),(cx+2,y+9),(cx+3,y+13)],fill=(250,250,250))
-    text(d,txt,x+3,y+2,INK,shadow=None)
+    speech_bubble(d,*e[1:],fill=(250,250,250),ink=INK)                     # the engine's bubble (engine/people.py)
 
 @fx('dp_katana')
 def _fx_katana(d,im,e,f):
@@ -551,5 +548,5 @@ def clip_review(f):
     s['actors']=acts
     return s
 
-CLIPS = [clip('bub', N_, clip_bub), clip('notchverse', 366, clip_notchverse), clip('webcam', 378, clip_webcam),
-         clip('review', 378, clip_review)]
+CLIPS = [clip('bub', N_, clip_bub), clip('notchverse', 365, clip_notchverse), clip('webcam', 377, clip_webcam),
+         clip('review', 377, clip_review)]

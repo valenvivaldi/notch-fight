@@ -49,10 +49,10 @@ def _fx_void(d,im,e,f):
     _,cx,cy,r=e
     v=Image.new('RGB',(W,H),(2,2,10)); vd=ImageDraw.Draw(v)
     for k in range(3):
-        rr=16+k*14; a0=(f*6+k*120)%360
+        rr=16+k*14; a0=(f*360/52+k*120)%360                         # a 52-frame turn: it loops
         vd.arc([W//2-rr*2,H//2-rr,W//2+rr*2,H//2+rr],a0,a0+140,fill=(60,40,140) if k%2 else (40,80,170))
     for i,(x,y,p) in enumerate(_STARS):
-        c=(255,255,255) if (i+f//3)%5 else (150,190,255)
+        c=(255,255,255) if (i+f//4)%6 else (150,190,255)
         vd.point((x,y),fill=c)
         if p>0.9 and (f+i)%8<4: vd.point((x+1,y),fill=(180,200,255)); vd.point((x-1,y),fill=(180,200,255))
     m=Image.new('L',(W,H),0); ImageDraw.Draw(m).ellipse([cx-r,cy-r*0.7,cx+r,cy+r*0.7],fill=255)

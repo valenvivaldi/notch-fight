@@ -93,9 +93,7 @@ def _fx_rewind(d,im,e,f):
 
 @fx('mm_bubble')
 def _fx_bubble(d,im,e,f):
-    _,txt,cx,y=e; w=len(txt)*4+5; x=max(1,min(W-w-2,int(cx-w/2)))
-    d.rectangle([x,y,x+w,y+9],fill=(250,250,250),outline=(30,30,30)); d.polygon([(cx-2,y+9),(cx+2,y+9),(cx,y+13)],fill=(250,250,250))
-    text(d,txt,x+3,y+2,(30,30,30),shadow=None)
+    speech_bubble(d,*e[1:],fill=(250,250,250),ink=(30,30,30))                     # the engine's bubble (engine/people.py)
 
 @fx('mm_teddy')
 def _fx_teddy(d,im,e,f):
