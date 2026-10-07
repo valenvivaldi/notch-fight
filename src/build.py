@@ -1,5 +1,6 @@
 """Renders every clip of every theme + all theme-to-theme transitions into the cwd:
-clips/<theme>__<clip>/ and transitions/<theme>__out|in/, plus sheet_<theme>_<clip>.png. Each folder
+clips/<theme>__<clip>/ and transitions/<theme>__out|in/, plus sheet_<theme>_<clip>.png, and the overlays
+the app draws over any clip (overlays/wait, overlays/count: transparent frames, see overlays.py). Each folder
 holds frames.png, all its frames packed in one image (a grid of SHEET_COLS columns, in order, row by
 row), and count, how many: one file per clip instead of hundreds. scripts/frames.py reads them back
 (the GIFs, the Claude Code mod).
@@ -14,6 +15,7 @@ import multiprocessing, os, random, shutil, sys, zlib
 from engine import *
 from themes import load_themes
 from transitions import iris_out, iris_in
+import overlays
 
 def selected(themes, only):
     """(theme, clip) pairs named by ONLY; exits listing the known names on a typo."""
@@ -28,9 +30,10 @@ def selected(themes, only):
 SHEET_COLS = 10
 
 def pack(dd, frames):
-    """frames.png (the frames in a grid of SHEET_COLS columns, row by row) and count, in folder dd."""
+    """frames.png (the frames in a grid of SHEET_COLS columns, row by row) and count, in folder dd.
+    RGBA frames (the overlays) keep their transparency."""
     cols=min(SHEET_COLS,len(frames)); rows=(len(frames)+cols-1)//cols
-    sh=Image.new('RGB',(W*cols,H*rows))
+    sh=Image.new('RGBA' if frames[0].mode=='RGBA' else 'RGB',(W*cols,H*rows))
     for i,fr in enumerate(frames): sh.paste(fr,((i%cols)*W,(i//cols)*H))
     sh.save(f'{dd}/frames.png'); open(f'{dd}/count','w').write(f'{len(frames)}\n')
 
@@ -80,5 +83,7 @@ if __name__=='__main__':
         for half,frames in (('out',iris_out(img)),('in',iris_in(img))):
             dd=f'transitions/{theme}__{half}'; shutil.rmtree(dd,ignore_errors=True); os.makedirs(dd)
             pack(dd,frames)
+    for name,frames in (('wait',overlays.wait_frames()),('count',overlays.count_frames())):   # cheap: always
+        dd=f'overlays/{name}'; shutil.rmtree(dd,ignore_errors=True); os.makedirs(dd); pack(dd,frames)
     open('.built','w').write('\n'.join(f'{t}__{c[0]}' for t,c in todo)+'\n')
     print('transitions ok')

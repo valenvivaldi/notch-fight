@@ -1,7 +1,10 @@
 import AppKit
 import QuartzCore
 
-// Drops a black pixel-art fight from under the MacBook notch. Click it to retract and quit.
+// Drops a black pixel-art fight from under the MacBook notch while Claude works; click it to retract.
+// Resident (the default, config "resident"): the app stays up, hidden, between prompts, and shows itself
+// when a Claude session starts working (a marker appears in sessions/, written by notch-hook.sh). Hidden it
+// runs no timers and holds no frames. With "resident": false it quits when it retracts, as it used to.
 // It only becomes the key window if one of its views needs the keyboard (none does: becomesKeyOnlyIfNeeded),
 // so whatever you're typing in keeps the keyboard when it drops in; clicks still reach it.
 final class NotchPanel: NSPanel {
@@ -42,19 +45,22 @@ final class App: NSObject, NSApplicationDelegate {
     // overlap: rises into the notch to cover its rounded bottom corners.
     // fillet: concave flare where the panel meets the notch's bottom edge. 0 = panel is exactly
     // notch-wide (the flare showed up as a protruding ledge on some Macs). Config: "fillet".
-    let overlap: CGFloat = 10, fillet: CGFloat = CGFloat(App.cfgNumber("fillet") ?? 0)
+    let overlap: CGFloat = 10
+    var fillet: CGFloat { CGFloat(cfgNumber("fillet") ?? 0) }
     // stretch: fill the real notch width with the art (true) or keep square pixels, centred (false). Config: "stretch".
-    let stretch: Bool = (App.config["stretch"] as? Bool) ?? true
+    var stretch: Bool { (config["stretch"] as? Bool) ?? true }
     // scale: grow the panel below the notch, keeping the art's proportions and staying centred. Config: "scale".
-    let scale: CGFloat = max(1, CGFloat(App.cfgNumber("scale") ?? 1))
+    var scale: CGFloat { max(1, CGFloat(cfgNumber("scale") ?? 1)) }
     var bodyW: CGFloat { notchW * scale }   // panel body (the art area); the notch-wide stem rises into the notch
     var bodyH: CGFloat { clipH * scale }
 
-    // ~/.config/notch-fight/config.json, read once. Keys: "first", "fillet", "stretch", "scale", "widthTweak",
-    // "newClips"/"enabled"/"disabled" (which clips play; see activeClips). NOTCH_FIGHT_CONFIG overrides the
-    // path (tests/dev: only seen when the binary is run directly, `open` does not pass the environment).
-    static let config: [String: Any] = Gate.loadConfig()
-    static func cfgNumber(_ key: String) -> Double? { (config[key] as? NSNumber)?.doubleValue }
+    // ~/.config/notch-fight/config.json, read again each time the panel shows. Keys: "first", "fillet",
+    // "stretch", "scale", "widthTweak", "click", "delay", "resident", "newClips"/"enabled"/"disabled" (which
+    // clips play; see activeClips). NOTCH_FIGHT_CONFIG overrides the path (tests/dev: only seen when the
+    // binary is run directly, `open` does not pass the environment).
+    var config: [String: Any] = Gate.loadConfig()
+    func cfgNumber(_ key: String) -> Double? { (config[key] as? NSNumber)?.doubleValue }
+    lazy var resident = !preview && ((config["resident"] as? Bool) ?? true)
     let shape = CAShapeLayer()
     var root: CALayer!
     var notchW: CGFloat = 185, notchH: CGFloat = 32, notchMidX: CGFloat = 0, screen: NSScreen!
@@ -69,6 +75,127 @@ final class App: NSObject, NSApplicationDelegate {
     }()
 
     func applicationDidFinishLaunching(_ n: Notification) {
+        win = NotchPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
+        win.level = .screenSaver
+        win.backgroundColor = .clear
+        win.isOpaque = false
+        win.hasShadow = false
+        win.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
+        win.becomesKeyOnlyIfNeeded = true                            // never takes the keyboard from what you're typing in
+
+        let v = ClickView(frame: .zero)
+        // Config "click": "close" (default) closes on a click; "next" skips to the next clip, a double click closes.
+        v.onClick = { [weak self] count in
+            guard let self, self.phase == .shown else { return }
+            if (self.config["click"] as? String) == "next" && count < 2 { self.idx = self.current.count }   // past the end: tick picks the next
+            else { self.dismiss() }
+        }
+        v.wantsLayer = true
+        root = v.layer!
+        root.backgroundColor = NSColor.black.cgColor
+        root.mask = shape
+        for layer in [art, alertLayer, badgeLayer] {
+            layer.magnificationFilter = .nearest
+            layer.actions = ["contents": NSNull()]
+            root.addSublayer(layer)
+        }
+        v.autoresizingMask = [.width, .height]
+        win.contentView = v
+
+        if preview {                                                 // tell a resident copy to step aside meanwhile
+            try? "\(getpid())".write(to: Self.previewFile, atomically: true, encoding: .utf8)
+            pokeOthers(); show(); return
+        }
+        if !resident {                                               // the old way: launched to show, quits when it retracts
+            if case (false, let why) = Gate.check() { NSLog("NotchFight: not showing (\(why))"); NSApp.terminate(nil); return }
+            show(); if phase != .shown { NSApp.terminate(nil); return }
+            watchSessions()
+            return
+        }
+        // Resident: wake on a change in sessions/ (a prompt starts or ends) and on SIGUSR1 (`nf pause` /
+        // `resume`, the Stop hook, a preview starting or ending). No polling while nobody is working.
+        let fm = FileManager.default
+        try? fm.createDirectory(at: Self.sessionsDir, withIntermediateDirectories: true)
+        let fd = open(Self.sessionsDir.path, O_EVTONLY)
+        if fd >= 0 {
+            dirWatch = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write, .rename, .delete], queue: .main)
+            dirWatch?.setEventHandler { [weak self] in self?.evaluate() }
+            dirWatch?.setCancelHandler { Darwin.close(fd) }
+            dirWatch?.resume()
+        }
+        evaluate()
+    }
+
+    // Over the clip: the "needs you" alert while a session waits for you (a permission prompt, a question;
+    // the marker says "waiting"), and the badge with how many sessions work when more than one does.
+    // Both from overlays/ (src/overlays.py), loaded while the panel is out.
+    let alertLayer = CALayer(), badgeLayer = CALayer()
+    var alertFrames: [CGImage] = [], countFrames: [CGImage] = []
+    var alertIdx = 0
+    var waitingNow = false, sessionCount = 0
+    var waitingSeen: Set<String> = []                   // sessions already counted as waiting (stats)
+
+    func noteSessions(_ live: [Session]) {
+        let waiting = Set(live.filter(\.waiting).map(\.name))
+        let new = waiting.subtracting(waitingSeen)
+        if !new.isEmpty && !preview { for _ in new { state.countWait() }; state.save() }
+        waitingSeen = waiting
+        if !waiting.isEmpty != waitingNow { alertIdx = 0; trace(waiting.isEmpty ? "alert off" : "alert on") }   // from its first frame
+        if live.count != sessionCount { trace("sessions \(live.count)") }
+        waitingNow = !waiting.isEmpty; sessionCount = live.count
+        badgeLayer.contents = sessionCount >= 2 && !countFrames.isEmpty ? countFrames[min(sessionCount, countFrames.count + 1) - 2] : nil
+    }
+
+    enum Phase { case hidden, shown, hiding }
+    var phase = Phase.hidden
+    var dirWatch: DispatchSourceFileSystemObject?
+    var pollTimer: Timer?, delayTimer: Timer?
+    var dismissedAt: Date?                              // a click hid it: back on the next prompt, not before
+    var launchArgsUsed = false                          // --first from the command line: the first show only
+
+    // Resident: should the panel be out right now? Asked whenever something may have changed. Shows it when a
+    // live session started (or prompted again) after the last dismissal, has worked at least "delay"
+    // seconds, the gate is open and no preview is playing; hides it otherwise. While anyone is working it
+    // also asks every 5 s (the gate's clock-driven rules, dead PIDs, the delay running out).
+    func evaluate() {
+        guard resident else { return }
+        config = Gate.loadConfig()
+        let live = liveSessions()
+        noteSessions(live)
+        pollTimer?.invalidate(); pollTimer = nil; delayTimer?.invalidate(); delayTimer = nil
+        if live.isEmpty { dismissedAt = nil; hide("no session working"); return }
+        pollTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: false) { [weak self] _ in self?.evaluate() }
+        // a session waiting for you counts even after a click, and skips the delay
+        let fresh = live.filter { $0.waiting || dismissedAt == nil || $0.date > dismissedAt! }
+        if fresh.isEmpty { hide("dismissed"); return }
+        if case (false, let why) = Gate.check() { hide(why); return }
+        if previewRunning() { hide("a preview is playing"); return }
+        if phase == .shown { return }
+        let wait = waitingNow ? 0 : (cfgNumber("delay") ?? 0) - Date().timeIntervalSince(fresh.map(\.date).min()!)
+        if wait > 0 {
+            delayTimer = Timer.scheduledTimer(withTimeInterval: wait, repeats: false) { [weak self] _ in self?.evaluate() }
+            return
+        }
+        if phase == .hidden { show() }                               // .hiding: evaluated again once hidden
+    }
+
+    // A preview (`nf preview`: a second copy with --only) leaves its PID in .preview while it plays and
+    // pokes the other copies when it starts and ends.
+    static var previewFile: URL { Gate.stateDir.appendingPathComponent(".preview") }
+    func previewRunning() -> Bool {
+        guard let raw = try? String(contentsOf: Self.previewFile, encoding: .utf8),
+              let pid = pid_t(raw.trimmingCharacters(in: .whitespacesAndNewlines)), pid != getpid() else { return false }
+        return kill(pid, 0) == 0 || errno == EPERM
+    }
+    func pokeOthers() {
+        for other in NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
+            where other.processIdentifier != getpid() { kill(other.processIdentifier, SIGUSR1) }
+    }
+
+    // The panel drops in: config re-read, the notch measured (the screen may have changed), the forced clips
+    // and the rotation planned, frames loaded for the first clip.
+    func show() {
+        config = Gate.loadConfig()
         screen = NSScreen.screens.first { $0.auxiliaryTopLeftArea != nil } ?? NSScreen.main!
         let f = screen.frame
         notchMidX = f.midX
@@ -77,35 +204,14 @@ final class App: NSObject, NSApplicationDelegate {
             notchW = r.minX - l.maxX
             notchMidX = (l.maxX + r.minX) / 2
             notchH = screen.safeAreaInsets.top
-            notchW += CGFloat(Self.cfgNumber("widthTweak") ?? Double(Self.notchWidthTweak[Self.hwModel] ?? 0))
+            notchW += CGFloat(cfgNumber("widthTweak") ?? Double(Self.notchWidthTweak[Self.hwModel] ?? 0))
         }
-        if !preview, case (false, let why) = Gate.check() {
-            NSLog("NotchFight: not showing (\(why))"); NSApp.terminate(nil); return
-        }
+        theme = ""; visitCount = 0; idx = 0; current = []; queue = []
         for name in planSelection() { enqueue(name) }
+        launchArgsUsed = true
         if allowed.isEmpty && queue.isEmpty {
-            NSLog("NotchFight: no clips active (see ./clips.sh); not showing the panel"); NSApp.terminate(nil); return
+            NSLog("NotchFight: no clips active (see ./clips.sh); not showing the panel"); return
         }
-        win = NotchPanel(contentRect: rect(height: 0), styleMask: [.borderless, .nonactivatingPanel],
-                         backing: .buffered, defer: false)
-        win.level = .screenSaver
-        win.backgroundColor = .clear
-        win.isOpaque = false
-        win.hasShadow = false
-        win.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
-        win.becomesKeyOnlyIfNeeded = true                            // never takes the keyboard from what you're typing in
-
-        let v = ClickView(frame: NSRect(origin: .zero, size: win.frame.size))
-        // Config "click": "close" (default) closes on a click; "next" skips to the next clip, a double click closes.
-        let skips = (Self.config["click"] as? String) == "next"
-        v.onClick = { [weak self] count in
-            guard let self else { return }
-            if skips && count < 2 { self.idx = self.current.count } else { self.close() }   // idx past the end: tick picks the next
-        }
-        v.wantsLayer = true
-        root = v.layer!
-        root.backgroundColor = NSColor.black.cgColor
-        root.mask = shape
         art.frame = CGRect(x: fillet, y: 0, width: bodyW, height: bodyH)
         // Art is authored at a fixed W×H canvas (185×64, MacBookPro18,3's notch width) with effects
         // drawn edge-to-edge. `notchW` varies per Mac (e.g. 209pt on a MacBook Air M2), so `.resizeAspect`
@@ -114,22 +220,57 @@ final class App: NSObject, NSApplicationDelegate {
         // the vertical scale factor is always 1 and no content is ever cropped.
         // Config "stretch": false keeps the art at its native width, centred (the black margins blend in).
         art.contentsGravity = stretch ? .resize : .resizeAspect
-        art.magnificationFilter = .nearest
         art.contentsScale = screen.backingScaleFactor
-        art.actions = ["contents": NSNull()]
-        root.addSublayer(art)
-        v.autoresizingMask = [.width, .height]
-        win.contentView = v
+        for layer in [alertLayer, badgeLayer] {                      // drawn over the clip, the same way
+            layer.frame = art.frame; layer.contentsGravity = art.contentsGravity; layer.contentsScale = art.contentsScale
+        }
+        let res = Bundle.main.resourceURL!.appendingPathComponent("overlays")
+        alertFrames = Self.loadFrames(res.appendingPathComponent("wait"), alpha: true)
+        countFrames = Self.loadFrames(res.appendingPathComponent("count"), alpha: true)
+        if !preview { noteSessions(liveSessions()) }
+        win.setFrame(rect(height: 0), display: false)
+        phase = .shown; trace("shown")
         shownSince = Date()
         tick()
         updateMask()
         win.orderFrontRegardless()
-
+        playTimer?.invalidate()
         playTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 20.0, repeats: true) { [weak self] _ in self?.tick() }
-        watchSessions()
-        Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in self?.watchSessions() }
-        if !preview { Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.watchGate() } }
         animate(to: bodyH, duration: 0.55, spring: true)
+    }
+
+    // The panel retracts into the notch. Resident: it then lets go of every frame and waits, hidden;
+    // otherwise the app quits.
+    func hide(_ why: String) {
+        guard phase == .shown else { return }
+        NSLog("NotchFight: hiding (\(why))")
+        phase = .hiding
+        saveState()
+        animate(to: 0, duration: 0.3, spring: false) { [weak self] in
+            guard let self else { return }
+            if !self.resident { NSApp.terminate(nil); return }
+            self.playTimer?.invalidate(); self.playTimer = nil
+            self.win.orderOut(nil)
+            self.art.contents = nil; self.alertLayer.contents = nil; self.badgeLayer.contents = nil
+            self.current = []; self.queue = []; self.cache = [:]; self.cacheOrder = []
+            self.alertFrames = []; self.countFrames = []
+            self.phase = .hidden; self.trace("hidden")
+            self.evaluate()                                          // a prompt may have come in meanwhile
+        }
+    }
+
+    // NOTCH_FIGHT_TRACE=<file>: one line per change: "shown" / "hidden", "alert on" / "alert off",
+    // "sessions <n>" (tests/test_resident.py).
+    let tracePath = ProcessInfo.processInfo.environment["NOTCH_FIGHT_TRACE"]
+    func trace(_ what: String) {
+        guard let tracePath, let h = FileHandle(forWritingAtPath: tracePath) ?? {
+            FileManager.default.createFile(atPath: tracePath, contents: nil); return FileHandle(forWritingAtPath: tracePath) }() else { return }
+        h.seekToEndOfFile(); h.write((what + "\n").data(using: .utf8)!); try? h.close()
+    }
+
+    // A click: back into the notch until the next prompt.
+    func dismiss() {
+        if resident { dismissedAt = Date(); evaluate() } else { close() }
     }
 
     func frames(_ key: String, _ dir: URL?) -> [CGImage]? {
@@ -220,10 +361,10 @@ final class App: NSObject, NSApplicationDelegate {
     //   3. ~/.config/notch-fight/config.json  {"first": "<name>"} or {"first": ["<name>", ...]}
     func forcedFirst() -> [String] {
         func split(_ s: String) -> [String] { s.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty } }
-        let args = CommandLine.arguments
-        if let i = args.firstIndex(of: "--first"), i + 1 < args.count { return split(args[i + 1]) }
-        if let env = ProcessInfo.processInfo.environment["NOTCH_FIGHT_FIRST"], !env.isEmpty { return split(env) }
-        let json = Self.config
+        let args = CommandLine.arguments                             // (the command line: the first show only)
+        if !launchArgsUsed, let i = args.firstIndex(of: "--first"), i + 1 < args.count { return split(args[i + 1]) }
+        if !launchArgsUsed, let env = ProcessInfo.processInfo.environment["NOTCH_FIGHT_FIRST"], !env.isEmpty { return split(env) }
+        let json = config
         if let one = json["first"] as? String { return split(one) }
         return (json["first"] as? [String]) ?? []
     }
@@ -235,12 +376,12 @@ final class App: NSObject, NSApplicationDelegate {
 
     // A folder's frames: its frames.png cut into `count` frames (a grid, row by row, as build.py packs
     // it), decoded once into memory so every frame is a cheap crop; an older build's NNN.png otherwise.
-    static func loadFrames(_ dir: URL) -> [CGImage] {
+    static func loadFrames(_ dir: URL, alpha: Bool = false) -> [CGImage] {
         let raw = (try? String(contentsOf: dir.appendingPathComponent("count"), encoding: .utf8)) ?? ""
         if let n = Int(raw.trimmingCharacters(in: .whitespacesAndNewlines)), n > 0,
            let src = CGImageSourceCreateWithURL(dir.appendingPathComponent("frames.png") as CFURL, nil),
            let packed = CGImageSourceCreateImageAtIndex(src, 0, nil) {
-            let sheet = decoded(packed) ?? packed
+            let sheet = decoded(packed, alpha: alpha) ?? packed
             let cols = min(sheetCols, n), rows = (n + cols - 1) / cols
             let w = sheet.width / cols, h = sheet.height / rows
             return (0..<n).compactMap { i in sheet.cropping(to: CGRect(x: (i % cols) * w, y: (i / cols) * h, width: w, height: h)) }
@@ -255,10 +396,10 @@ final class App: NSObject, NSApplicationDelegate {
     static let sheetCols = 10                       // build.py's SHEET_COLS
 
     /// The image drawn once into a bitmap: its crops then share that memory instead of decoding the PNG again.
-    static func decoded(_ img: CGImage) -> CGImage? {
+    static func decoded(_ img: CGImage, alpha: Bool = false) -> CGImage? {
         let space = img.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB)!
         guard let ctx = CGContext(data: nil, width: img.width, height: img.height, bitsPerComponent: 8, bytesPerRow: 0,
-                                  space: space, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
+                                  space: space, bitmapInfo: (alpha ? CGImageAlphaInfo.premultipliedLast : .noneSkipLast).rawValue) else { return nil }
         ctx.draw(img, in: CGRect(x: 0, y: 0, width: img.width, height: img.height))
         return ctx.makeImage()
     }
@@ -267,12 +408,7 @@ final class App: NSObject, NSApplicationDelegate {
     let preview = CommandLine.arguments.contains("--only")
 
     // Gate.check() (Gate.swift) decides whether the panel may show: paused, quiet hours, screen sharing.
-    // Asked at launch and every few seconds while up; in-process, so asking costs next to nothing.
-    func watchGate() {
-        DispatchQueue.global(qos: .utility).async {
-            if case (false, let why) = Gate.check() { DispatchQueue.main.async { NSLog("NotchFight: hiding (\(why))"); self.close() } }
-        }
-    }
+    // In-process, so asking costs next to nothing.
 
     // Loads the clip list, works out the rotation (allowed) and resolves the forced clips, which play
     // first, in order, even when not active. Shared by the launch and by --print-selection.
@@ -303,7 +439,7 @@ final class App: NSObject, NSApplicationDelegate {
     // "disabled": only "enabled", so new clips are ignored until added. Clips shipped off by default (a
     // .default-off marker from build.py) only play when listed in "enabled". Unknown names are logged.
     func activeClips() -> [String] {
-        let cfg = Self.config, all = Array(clipDirs.keys)
+        let cfg = config, all = Array(clipDirs.keys)
         let optIn = (cfg["newClips"] as? String) == "disabled"
         let enabled = Set((cfg["enabled"] as? [String]) ?? []), disabled = Set((cfg["disabled"] as? [String]) ?? [])
         for (key, list) in [("enabled", enabled), ("disabled", optIn ? [] : disabled)] {
@@ -370,13 +506,15 @@ final class App: NSObject, NSApplicationDelegate {
         if idx >= current.count {
             if preparing && queue.isEmpty { return }                  // the next one is nearly ready: hold this frame
             if queue.isEmpty, let next = pickNext() { enqueue(next) }
-            guard !queue.isEmpty else { close(); return }             // only forced clips, and they are done
+            guard !queue.isEmpty else { close(); return }             // a preview's clips are done
             let item = queue.removeFirst(); current = item.frames; idx = 0
             if let name = item.name { started(name) }
             prepareNext()
         }
         art.contents = current[idx]
         idx += 1
+        alertLayer.contents = waitingNow && !alertFrames.isEmpty ? alertFrames[alertIdx % alertFrames.count] : nil
+        alertIdx += 1
     }
 
     // Manual 60 fps frame animation: window frames don't take spring timing reliably.
@@ -393,33 +531,58 @@ final class App: NSObject, NSApplicationDelegate {
         }
     }
 
-    // Session watchdog: ~/.config/notch-fight/sessions/<id> holds the PID of each working Claude
-    // session (written by scripts/notch-hook.sh). Markers of dead PIDs are pruned (a closed terminal
-    // never fires Stop); once every session is gone the panel retracts. Launches without any marker
-    // (manual `open --args --first ...`) are left alone.
-    var sawSession = false
-    func watchSessions() {
-        if preview { return }
+    // ~/.config/notch-fight/sessions/<id> holds the PID of each working Claude session (written by
+    // scripts/notch-hook.sh on each prompt, so its date is when that prompt started). Markers of dead PIDs
+    // are pruned (a closed terminal never fires Stop). Returns the live markers' dates.
+    static var sessionsDir: URL { Gate.stateDir.appendingPathComponent("sessions") }   // (moves with NOTCH_FIGHT_CONFIG: tests)
+    // A marker reads "<pid>" or "<pid> waiting" (the hook's `wait`: a permission prompt is up).
+    struct Session { let name: String; let date: Date; let waiting: Bool }
+    func liveSessions() -> [Session] {
         let fm = FileManager.default
-        let dir = fm.homeDirectoryForCurrentUser.appendingPathComponent(".config/notch-fight/sessions")
-        let files = (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
-        var alive = 0
+        let files = (try? fm.contentsOfDirectory(at: Self.sessionsDir, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+        var live: [Session] = []
         for f in files where !f.lastPathComponent.hasPrefix(".") {
-            let raw = (try? String(contentsOf: f, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            if let pid = pid_t(raw) {
-                if kill(pid, 0) == 0 || errno == EPERM { alive += 1 } else { try? fm.removeItem(at: f) }
+            let words = ((try? String(contentsOf: f, encoding: .utf8)) ?? "").split(whereSeparator: \.isWhitespace)
+            let m = (try? f.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+            let s = Session(name: f.lastPathComponent, date: m, waiting: words.dropFirst().contains("waiting"))
+            if let pid = words.first.flatMap({ pid_t($0) }) {
+                if kill(pid, 0) == 0 || errno == EPERM { live.append(s) } else { try? fm.removeItem(at: f) }
             } else {   // no PID recorded: trust the marker for 2 h, like notch-hook.sh
-                let m = (try? f.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
-                if Date().timeIntervalSince(m) < 7200 { alive += 1 } else { try? fm.removeItem(at: f) }
+                if Date().timeIntervalSince(m) < 7200 { live.append(s) } else { try? fm.removeItem(at: f) }
             }
         }
-        if alive > 0 { sawSession = true } else if sawSession { close() }
+        return live
     }
 
+    // Not resident: every 3 s, retract and quit once every session is gone. Launches without any marker
+    // (manual `open --args --first ...`) are left alone; the gate is asked too.
+    var sawSession = false
+    func watchSessions() {
+        Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in self?.recheck() }
+    }
+    func recheck() {
+        if preview { return }
+        if resident { evaluate(); return }
+        if case (false, let why) = Gate.check() { NSLog("NotchFight: hiding (\(why))"); close(); return }
+        let live = liveSessions(); noteSessions(live)
+        if !live.isEmpty { sawSession = true } else if sawSession { close() }
+    }
+    // SIGUSR1 (the Stop hook, `nf pause`): look again now. Not resident, with nobody working: retract and quit.
+    func poke() {
+        if preview { return }
+        if resident { evaluate(); return }
+        if case (false, let why) = Gate.check() { NSLog("NotchFight: hiding (\(why))"); close(); return }
+        if liveSessions().isEmpty { close() }
+    }
+
+    // Retract and quit (SIGTERM, a preview that is over, the old non-resident way).
     var closing = false
     func close() {
         if closing { return }; closing = true
         saveState()
+        if preview { try? FileManager.default.removeItem(at: Self.previewFile); pokeOthers() }
+        if phase != .shown { NSApp.terminate(nil); return }
+        phase = .hiding
         animate(to: 0, duration: 0.3, spring: false) { NSApp.terminate(nil) }
     }
 }
@@ -464,9 +627,13 @@ let app = NSApplication.shared
 let d = App()
 app.delegate = d
 app.setActivationPolicy(.accessory)
-// SIGTERM (pkill, e.g. from a Claude Code Stop hook) retracts into the notch before quitting.
-signal(SIGTERM, SIG_IGN)
+// SIGTERM (pkill, `nf resident off`, build.sh) retracts into the notch before quitting. SIGUSR1 (the Stop
+// hook, `nf pause` / `resume`): look at the sessions and the gate again now.
+signal(SIGTERM, SIG_IGN); signal(SIGUSR1, SIG_IGN)
 let term = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
 term.setEventHandler { d.close() }
 term.resume()
+let usr1 = DispatchSource.makeSignalSource(signal: SIGUSR1, queue: .main)
+usr1.setEventHandler { d.poke() }
+usr1.resume()
 app.run()

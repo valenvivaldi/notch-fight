@@ -3,7 +3,8 @@ import Foundation
 // What the app remembers between launches, in state.json next to config.json (written atomically):
 //   "rotation": {"played": [...], "lastClip": "..."}   the clips already played this round, so a new launch
 //                                                     carries on with the round instead of starting another;
-//   "stats":    {"plays": {clip: n}, "shown": {"YYYY-MM-DD": seconds}}   for the menu's stats, later.
+//   "stats":    {"plays": {clip: n}, "shown": {"YYYY-MM-DD": seconds}, "waits": {"YYYY-MM-DD": n}}
+//               for the menu's stats, later.
 // Keys it does not know are kept as they are.
 final class State {
     let url: URL
@@ -44,6 +45,14 @@ final class State {
         var shown = stats["shown"] as? [String: Int] ?? [:]
         shown[f.string(from: day), default: 0] += seconds
         stats["shown"] = shown
+    }
+
+    // Times a session stopped to wait for you (a permission prompt, a question), per day.
+    func countWait(on day: Date = Date()) {
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
+        var waits = stats["waits"] as? [String: Int] ?? [:]
+        waits[f.string(from: day), default: 0] += 1
+        stats["waits"] = waits
     }
 
     func save() {

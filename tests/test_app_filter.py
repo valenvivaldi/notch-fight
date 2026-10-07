@@ -121,9 +121,11 @@ class AppDefaultOff(unittest.TestCase):
 @unittest.skipUnless(HAS_APP and os.environ.get('NOTCH_FIGHT_TEST_PANEL') == '1',
                      'real launches show the panel: opt in with NOTCH_FIGHT_TEST_PANEL=1')
 class AppPanel(unittest.TestCase):
-    """Real launches, in the background (`open -g -n`): the panel shows, the focused window keeps focus."""
+    """Real launches, in the background (`open -g -n`): the panel shows, the focused window keeps focus.
+    Not resident (launched to show, quits when done): the resident app has tests/test_resident.py."""
     def launch(self, cfg, wait=3.0):
         """Launch a new instance; return (its log, whether it quit on its own within `wait` s)."""
+        cfg = dict(cfg, resident=False)
         log = os.path.join(tempfile.mkdtemp(), 'err.log')
         p = subprocess.Popen(['open', '-g', '-n', '-W', '--env', f'NOTCH_FIGHT_CONFIG={config_file(cfg)}',
                               '--stderr', log, APP])

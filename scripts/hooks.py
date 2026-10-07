@@ -9,6 +9,8 @@ else $CLAUDE_CONFIG_DIR, else ~/.claude.
 import json, os, shlex, shutil, sys, time
 
 MARKS = ('NotchFight', 'notch-hook.sh')   # every hook command we own mentions one of these
+# the Notification types that mean Claude is waiting for you (its "matcher")
+WAIT_TYPES = 'permission_prompt|elicitation_dialog|elicitation_url_dialog|agent_needs_input'
 
 def claude_dirs():
     raw = os.environ.get('NOTCH_FIGHT_CLAUDE_DIRS') or os.environ.get('CLAUDE_CONFIG_DIR') or '~/.claude'
@@ -54,6 +56,13 @@ def apply(path):
         hooks.setdefault('UserPromptSubmit', []).append({'hooks': [{'type': 'command', 'command': start, 'timeout': 5}]})
         for ev in ('Stop', 'StopFailure', 'SessionEnd'):
             hooks.setdefault(ev, []).append({'hooks': [{'type': 'command', 'command': stop, 'timeout': 5}]})
+        # Claude waits for you (a permission prompt, an MCP question): the "needs you" alert; it comes off
+        # once a tool has run or the question is answered (`work` is a no-op unless the session waits)
+        wait, work = f'{hook} wait {shlex.quote(app)}', f'{hook} work'
+        hooks.setdefault('Notification', []).append({'matcher': WAIT_TYPES, 'hooks': [{'type': 'command', 'command': wait, 'timeout': 5}]})
+        hooks['Notification'].append({'matcher': 'elicitation_complete|elicitation_response', 'hooks': [{'type': 'command', 'command': work, 'timeout': 5}]})
+        for ev in ('PostToolUse', 'PostToolUseFailure', 'ElicitationResult'):
+            hooks.setdefault(ev, []).append({'hooks': [{'type': 'command', 'command': work, 'timeout': 5}]})
         print(f'hooks installed in {path} -> {app}')
     else:
         print(f'hooks removed from {path}')

@@ -75,7 +75,8 @@ fi
 cat <<MSG
 
 Done. Send any prompt to Claude Code and the fight drops out of the notch;
-it retracts when Claude finishes. Click it to dismiss.
+it retracts when Claude finishes. Click it to dismiss until your next prompt.
+The app then stays up, hidden, between prompts (nf resident on: also at login; off: not at all).
 If it does not appear in an already-open Claude Code session, open /hooks once (reloads config).
 Choose clips: ./clips.sh   Uninstall: ./uninstall.sh
 MSG
