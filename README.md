@@ -317,7 +317,7 @@ for `sextant`, five for `octant`) into `build/mod/`.
 
 ## Panel shape
 
-The panel takes its size and position from the real notch of each Mac. Two looks can be tuned in
+The panel takes its size and position from the real notch of each Mac. Its looks can be tuned in
 `~/.config/notch-fight/config.json` (defaults shown; `./build.sh` only rewrites `"first"`):
 
 | Key | Default | Effect |
@@ -326,10 +326,20 @@ The panel takes its size and position from the real notch of each Mac. Two looks
 | `stretch` | `true` | Stretch the art to the notch width. `false` keeps square pixels, centred at 185pt (the black margins blend in). |
 | `scale` | `1` | Make the panel bigger than the notch (e.g. `1.5`), keeping the art's proportions and staying centred under it. `install.sh` sets `1.5` when Vorssaint is installed (its bar is wider than the notch), unless you already chose a scale. |
 | `widthTweak` | per model | Width correction (pt) when the panel overhangs by a hair. Built-in: `Mac14,2` → `-1`. |
+| `entrance` | `"spring"` | How it comes out and goes back: `"spring"` drops and settles with a wobble; `"bounce"` falls and bounces off the bottom; `"crt"` drops dark and switches on like an old TV (a bright line that opens up), and off the same way. |
+| `transitions` | `"mix"` | Between themes: a random style each time (`"mix"`), or always one of `"iris"`, `"dissolve"`, `"wipe"`, `"crt"`. A theme can have its own (the cinema's curtain). |
+| `glow` | off | `"soft"` or `"strong"`: a halo of the clip's light hugs the panel (its sides and below it, ~16 pt), in the colour of the frame on screen. |
 
 ```json
-{ "fillet": 8, "stretch": false }
+{ "fillet": 8, "stretch": false, "entrance": "crt", "glow": "soft" }
 ```
+
+Transitions are built per theme (`src/transitions.py`): the half that closes a theme and the half that
+opens the next meet at black, so any two go together. Each theme has `transitions/<theme>__out` / `__in`
+(the iris, also what the Claude Code mod plays) and `<theme>__out__<style>` for the other styles; a
+theme module can set `TRANSITION = '<style>'` to have only its own. The glow's colours come from the
+build too: `clips/<clip>/glow`, one `rrggbb` per frame: the hue from the scene's vivid pixels (not
+Claude's own orange, which is in every clip), the brightness from how lit the scene is.
 
 ## Layout
 
@@ -352,13 +362,14 @@ src/
 │   ├── sf.py  mario.py  mc.py  ds.py  sw.py  matrix.py  term.py  bb.py
 │   ├── naruto_edo.py  naruto_zabuza.py  dbz_buu.py  dbz_jiren.py  jjk_sukuna.py  ghibli_totoro.py  snk_colosal.py  arg_86.py  naruto_shikamaru.py  mist_kelsier.py  xmen_nightcrawler.py  xmen_gambit.py  arg_mate.py  arg_colapinto.py  naruto_lee.py  lol_yasuo.py  jjk_toji.py  jjk_maki.py  arg_alejo.py  arg_alejo_flotar.py  arg_cordoba.py   # sub-themes
 │   └── __init__.py    # auto-discovers every theme module
-├── transitions.py     # asterisk-iris transition between themes
+├── transitions.py     # transitions between themes: iris, dissolve, wipe, crt, and themes' own (curtain)
 ├── overlays.py        # drawn over any clip: the NEEDS YOU alert, the sessions badge (transparent frames)
 ├── build.py           # entry point used by build.sh
 └── legacy/single_clip.py   # the original standalone 10 s clip (--black for the notch version)
 app/main.swift, app/Info.plist   # the notch app
 app/Gate.swift                   # may the panel show (pause, quiet hours, sharing): app + menu, like `nf gate`
 app/State.swift                  # state.json: the rotation's round across launches, play counts, waits
+app/Glow.swift                   # the light a clip spills below the panel (config "glow")
 app/menu.swift                   # the menu bar icon (nf menu on)
 mod/                             # the Claude Code mod (band above the prompt)
 media/                           # rendered previews

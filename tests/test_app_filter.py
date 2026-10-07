@@ -55,6 +55,10 @@ class AppSelection(unittest.TestCase):
         self.assertIn(f'forced: {CLIPS[0]}', out)
         self.assertIn('panel: shown', out)
 
+    def test_it_finds_the_transition_styles(self):
+        out, _, _ = selection({})
+        self.assertIn('transition styles: first, crt, dissolve, wipe', out)
+
     def test_unknown_names_in_the_lists_are_logged(self):
         out, _, _ = selection({'newClips': 'enabled', 'disabled': ['nope__clip']})
         self.assertIn("unknown clip 'nope__clip'", out)

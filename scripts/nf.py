@@ -155,6 +155,11 @@ def app_running(): return subprocess.run(['pgrep', '-x', 'NotchFight'], capture_
 def hide_app(): subprocess.run(['pkill', '-x', 'NotchFight'], capture_output=True)
 def poke_app(): subprocess.run(['pkill', '-USR1', '-x', 'NotchFight'], capture_output=True)   # look again now
 def resident(cfg=None): return (load_cfg() if cfg is None else cfg).get('resident', True) is not False
+def gate_changed(cfg):
+    """After a change to the gate's settings: a resident app looks again (it hides or comes back by
+    itself; never killed); a non-resident one is closed if it may not show any more."""
+    if resident(cfg): poke_app()
+    elif not gate(cfg)[0]: hide_app()
 def show_app(*args): subprocess.run(['open', '-g', APP, *(['--args', *args] if args else [])], capture_output=True)
 
 # ---- commands ----------------------------------------------------------------------------------------
@@ -239,12 +244,12 @@ def cmd_quiet(args):
     cfg = load_cfg()
     if not args:
         q = cfg.get('quiet'); print('Quiet hours: off' if not q else f"Quiet hours: {q['from']}-{q['to']} ({q.get('days', 'all')})"); return
-    if args[0] == 'off': cfg.pop('quiet', None); save_cfg(cfg); print('Quiet hours: off'); return
+    if args[0] == 'off': cfg.pop('quiet', None); save_cfg(cfg); print('Quiet hours: off'); gate_changed(cfg); return
     f, t = parse_quiet(args[0]); days = args[1] if len(args) > 1 else 'all'
     if days not in ('all', 'weekdays'): raise NfError("days: 'all' or 'weekdays'")
     cfg['quiet'] = {'from': f, 'to': t, 'days': days}; save_cfg(cfg)
     print(f"Quiet hours: {f}-{t}, {'Monday to Friday' if days == 'weekdays' else 'every day'}")
-    if not gate(cfg)[0]: hide_app()
+    gate_changed(cfg)
 
 SHARE_WORDS = {'hide': True, 'show': False, 'on': True, 'off': False}   # on/off: older spelling of hide/show
 
@@ -256,7 +261,7 @@ def cmd_share(args):
     if args[0] not in SHARE_WORDS: raise NfError('nf share hide|show (hide the panel while sharing, or keep showing it)')
     cfg['pauseOnShare'] = SHARE_WORDS[args[0]]; save_cfg(cfg)
     print(f"While sharing the screen: {share_line(cfg['pauseOnShare'])}")
-    if cfg['pauseOnShare'] and not gate(cfg)[0]: hide_app()
+    gate_changed(cfg)
 
 def parse_seconds(s):
     s = s.strip().lower()
