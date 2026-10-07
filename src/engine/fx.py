@@ -1,6 +1,7 @@
 """Effect registry. A scene lists effects as tuples ('name', *args); each theme registers the
 effects it owns with @fx('name'). Effects used by several themes live here."""
 from .core import *
+from . import loop
 from .text import text, big_text
 from .closeup import fade_to
 
@@ -86,7 +87,7 @@ def _fx_tracer(d,im,e,f):
 @fx('fire')
 def _fx_fire(d,im,e,f):
     """A column of flame: white-hot core, orange body, red tips, flickering."""
-    _,x,feet,sz=e; rr=random.Random(f*13+int(x))
+    _,x,feet,sz=e; rr=random.Random(loop.frame(f)*13+int(x))       # per frame, and frame N is frame 0
     for j in range(int(10+sz*3)):
         up=rr.random()**0.7; yy=feet-up*sz*3; xx=x+rr.uniform(-1,1)*sz*(1-up*0.6); r=max(1,int(sz*(1-up)*0.7+rr.randint(0,2)))
         c=(255,245,170) if up<0.25 else ((255,160,40) if up<0.6 else (220,60,20))

@@ -34,58 +34,30 @@ POSES = {   # pose -> (back elbow, back hand, front elbow, front hand, lean, leg
 }
 LEGS = {'stand':(-1,1,0),'stance':(-3,3,0),'lunge':(-5,5,1),'reel':(-4,2,0),'knock':(0,0,0)}
 
-_put, _seg = put, seg                                               # the engine's (engine/people.py)
 
 HIP=GH-9; TY=HIP-7; HY=TY-5                                         # legs 9 rows, torso 7, head 5
-_built={}
-def build(who,pose):
-    key=(who,pose)
-    if key in _built: return _built[key]
-    g=[['.']*GW for _ in range(GH)]
-    be,bh,fe,fh,lean,legs=POSES[pose]
-    bx,fx_,bend=LEGS[legs]
-    for k,dx in enumerate((bx,fx_)):                                # the legs, the boots
-        for t in range(9):
-            x=C+round(dx*t/8)+(bend if 3<t<7 and k==1 else 0)+(k*2-1)
-            c='k' if t>=6 else (('P' if t%2 else 'p') if (who=='jinx' and k==1) else 'p')
-            _put(g,x,HIP+t,c); _put(g,x+1,HIP+t,c)
-        _put(g,C+dx+(k*2-1)+2,GH-1,'k')
-    sh=lambda y: round(lean*(HIP-y)/(HIP-HY))
-    def arm(e,h,front):
-        sx,sy=C+(2 if front else -2)+sh(TY+1),TY+1
-        ex,ey=C+e[0]+sh(TY),TY+e[1]; hx,hy=C+h[0]+sh(TY),TY+h[1]
-        if who=='jinx':
-            _seg(g,sx,sy,ex,ey,'s' if front else 'S'); _seg(g,ex,ey,hx,hy,'s' if front else 'S')
-            _put(g,(sx+ex)//2,(sy+ey)//2,'t')                     # a cloud tattoo on the arm
-        else:
-            _seg(g,sx,sy,ex,ey,'j' if front else 'J'); _seg(g,ex,ey,hx,hy,'g')
-            for dx in range(-2,3):                                  # the Atlas gauntlet: a big brass fist
-                for dy in range(-2,3): _put(g,hx+dx,hy+dy,'g')
-            _put(g,hx,hy,'c'); _put(g,hx+1,hy,'c'); _put(g,hx-1,hy-1,'G')
-    arm(be,bh,False)
-    for y in range(TY,HIP+1):                                       # the torso
-        o=sh(y)
-        for x in range(C-2+o,C+3+o):
-            if who=='jinx': c='b' if y<TY+2 else ('B' if y==HIP-1 else ('p' if y==HIP else 's'))
-            else: c='u' if C<=x-o<=C+1 and y<HIP-1 else ('B' if y==HIP-1 else 'j')
-            _put(g,x,y,c)
-        if who=='jinx' and y==TY+3: _put(g,C-1+o,y,'t'); _put(g,C+1+o,y+1,'t')   # the clouds on her belly
-    o=sh(HY)
-    for y in range(HY,HY+5):
-        for x in range(C-2+o,C+3+o): _put(g,x,y,'s')
-    eye='e' if who=='jinx' else 'K'
-    _put(g,C+o,HY+2,eye); _put(g,C+2+o,HY+2,eye)
-    if who=='jinx':
-        hair=["hhhhhhh","hhhhhhh","hh.h..h","h.....h"]                   # the fringe, cut straight
-        _put(g,C+1+o,HY+4,'m')
-    else:
-        hair=[".hhhhh.","hhhhhhh","hhh...."]                             # the pink undercut
-        _put(g,C+2+o,HY+3,'v')                                       # the VI tattoo
-    for i,row in enumerate(hair):
-        for j,ch in enumerate(row):
-            if ch!='.': _put(g,C-3+o+j,HY-1+i,ch)
-    arm(fe,fh,True)
-    _built[key]=S([''.join(r) for r in g]); return _built[key]
+def _top(g, at):                                                    # Jinx's crop top, two rows
+    for y in (at['ty'], at['ty'] + 1):
+        for x in range(at['c'] - 2 + at['sh'](y), at['c'] + 3 + at['sh'](y)): put(g, x, y, 'b')
+    put(g, at['c'] - 1 + at['sh'](at['ty'] + 3), at['ty'] + 3, 't')   # a cloud on her belly
+def _shirt(g, at):                                                  # Vi's, under the open jacket
+    for y in range(at['ty'], at['hip'] - 1):
+        for dx in (0, 1): put(g, at['c'] + dx + at['sh'](y), y, 'u')
+def _mouth(g, at): put(g, at['c'] + 1 + at['sh'](at['hy']), at['hy'] + 4, 'm')
+def _vi_tattoo(g, at): put(g, at['c'] + 2 + at['sh'](at['hy']), at['hy'] + 3, 'v')
+
+_SISTER = dict(w=GW, h=GH, c=C, legs=9, torso=7, torso_cols=(-2, 3), hair_y=1, leg=dict(boot_rows=3))
+JINX = dict(_SISTER, name='jinx', eye='e', hair=["hhhhhhh", "hhhhhhh", "hh.h..h", "h.....h"],   # the fringe, cut straight
+            leg=dict(boot_rows=3, stripe='P'), body=dict(color='s', belt='B', hip='p'),
+            arm=dict(sleeve='s', back_sleeve='S', fore='s', back_fore='S', back_hand='S', mark='t'),
+            paint={'body': [_top], 'head': [_mouth]})
+VI = dict(_SISTER, name='vi', hair=[".hhhhh.", "hhhhhhh", "hhh...."],                          # the pink undercut
+          body=dict(belt='B'), arm=dict(sleeve='j', back_sleeve='J', fore='g', fist=5),       # the Atlas gauntlets
+          paint={'body': [_shirt], 'head': [_vi_tattoo]})
+
+def build(who, pose):
+    """Jinx or Vi in a pose (POSES): engine/people.py's figure()."""
+    return figure(JINX if who == 'jinx' else VI, POSES[pose])
 
 JPAL = {'s':(244,226,228),'S':(214,196,200),'e':(255,60,160),'h':HAIR,'b':(40,30,60),'B':PINK,'p':(110,60,150),'P':PINK,
         'k':(40,34,50),'t':PINK,'m':(200,60,90)}

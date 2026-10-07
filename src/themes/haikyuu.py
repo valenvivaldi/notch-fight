@@ -27,55 +27,29 @@ ARMS = {                                                             # (back han
  'up':((-1,-8),(3,-8)), 'back':((-7,3),(-6,4)), 'swing':((5,-6),(-1,-7)), 'hit':((-4,4),(7,-4)),
  'cheer':((-5,-7),(5,-7)), 'toss':((-6,-1),(2,-8)), 'hold':((-3,'T'),(4,2)),
 }
-def _legs(kind,t,L):
-    """Left column of the back and the front leg (2 px each), t rows down from the hip."""
-    fr=t/max(1,L-1)
-    if kind=='bent': b=1 if 0<t<L-1 else 0; return -2-b, 1+b
-    if kind=='run1': return -2-round(3*fr), 1+round(3*fr)
-    if kind=='run2': return -2-round(fr), 1+round(2*fr)
-    if kind=='jump': return -2-round(3*fr), 1-round(3*fr)
-    return -2, 1
+def _number(g, at):                                                 # the number on the jersey
+    c, ty = at['c'], at['ty']
+    for y in (ty + 1, ty + 2): put(g, c - 1, y, 'n'); put(g, c + 1, y, 'n')
 
-_line = seg                                                          # the engine's (engine/people.py)
-
-_built={}
-def build(who,arms='down',legs='stand',shut=False):
-    """A player in a pose: legs (stand, bent, run1, run2, jump), arms (ARMS), eyes shut or not. Faces right."""
-    key=(who['name'],arms,legs,shut)
-    if key in _built: return _built[key]
-    g=[['.']*GW for _ in range(GH)]; L,T=who['L'],who['T']
-    crouch=1 if legs=='bent' else 0; Lc=L-crouch
-    foot=GH-1; hip=foot-Lc+1; ty=hip-2-T; hy=ty-4
-    for t in range(Lc):                                              # the legs, knee pads, shoes
-        for k,x0 in enumerate(_legs(legs,t,Lc)):
-            for dx in (0,1):
-                g[hip+t][C+x0+dx]='k' if t==Lc-1 else ('w' if t==Lc//2 else 's')
-            if t==Lc-1: g[hip+t][C+x0+(-1 if legs=='jump' else 2)]='k'
-    for y in (hip-2,hip-1):                                          # the shorts
-        for x in range(C-2,C+3): g[y][x]='p'
-    (bx,by),(fx_,fy)=[(dx,{'T':T,'T+1':T+1}.get(dy,dy)) for dx,dy in ARMS[arms]]
-    _line(g,C-3,ty,C+bx,ty+by,'s','j')                               # the back arm, behind the body
-    for y in range(ty,ty+T):                                         # the jersey: collar, number
-        for x in range(C-2,C+3): g[y][x]='j'
-    for x in (C-1,C,C+1): g[ty][x]='J'
-    for y in (ty+1,ty+2): g[y][C-1]='n'; g[y][C+1]='n'
-    for y in range(hy,hy+4):                                         # the head
-        for x in range(C-2,C+3): g[y][x]='s'
-    for x in (C,C+2): g[hy+2][x]='o' if shut else 'K'
-    for i,row in enumerate(who['hair']):
-        for j,ch in enumerate(row):
-            if ch!='.': g[hy-who['hoff']+i][C-3+j]=ch
-    _line(g,C+3,ty,C+fx_,ty+fy,'s','j')                              # the front arm
-    _built[key]=S([''.join(r) for r in g]); return _built[key]
+def build(who, arms='down', legs='stand', shut=False):
+    """A player in a pose: legs (stand, bent, run1, run2, jump), arms (ARMS), eyes shut or not. Faces right:
+    engine/people.py's figure(), with straight arms."""
+    (bh, fh) = ARMS[arms]
+    return figure(who, (None, bh, None, fh, 0, legs), **({'shut': True} if shut else {}))
 
 def _kit(hair,jersey,trim,num,shorts,skin=SKIN,shoes=(236,236,240)):
     return {'h':hair,'y':(250,226,120),'s':skin,'j':jersey,'J':trim,'n':num,'p':shorts,'w':(250,250,250),'k':shoes}
-HINATA   = dict(name='hinata',  L=4,T=4,hoff=2,hair=["h..h.h.",".hhhhhh","hhhhhhh","hh.h..h","h......"])
-KAGEYAMA = dict(name='kageyama',L=6,T=5,hoff=1,hair=[".hhhhh.","hhhhhhh","hhhhhh.","h......"])
-NOYA     = dict(name='noya',    L=4,T=4,hoff=3,hair=["...y...","..hyh..",".hhhhh.","hhhhhhh","hh....h"])
-USHIJIMA = dict(name='ushijima',L=6,T=6,hoff=1,hair=[".hhhhh.","hhhhhhh","hh...h.","h......"])
-TENDOU   = dict(name='tendou',  L=7,T=5,hoff=3,hair=["h.h.h..","hhhhh..",".hhhhhh","hhhhhhh","h.....h"])
-SERVER   = dict(name='server',  L=5,T=5,hoff=1,hair=[".hhhhh.","hhhhhhh","h.....h"])
+def player(name, L, T, hoff, hair):
+    """A volleyball player: engine/people.py's body spec (bare legs with knee pads, shorts, the jersey)."""
+    return dict(name=name, w=GW, h=GH, c=C, legs=L, torso=T, head=4, hair=hair, hair_y=hoff, torso_cols=(-2, 3),
+                shorts='p', leg=dict(color='s', pad='w', gap=-2, stand=(0, 0)), body=dict(collar='J'),
+                arm=dict(sleeve='j', shoulders=((-3, 0), (3, 0))), paint={'body': [_number]})
+HINATA   = player('hinata',   4, 4, 2, ["h..h.h.", ".hhhhhh", "hhhhhhh", "hh.h..h", "h......"])
+KAGEYAMA = player('kageyama', 6, 5, 1, [".hhhhh.", "hhhhhhh", "hhhhhh.", "h......"])
+NOYA     = player('noya',     4, 4, 3, ["...y...", "..hyh..", ".hhhhh.", "hhhhhhh", "hh....h"])
+USHIJIMA = player('ushijima', 6, 6, 1, [".hhhhh.", "hhhhhhh", "hh...h.", "h......"])
+TENDOU   = player('tendou',   7, 5, 3, ["h.h.h..", "hhhhh..", ".hhhhhh", "hhhhhhh", "h.....h"])
+SERVER   = player('server',   5, 5, 1, [".hhhhh.", "hhhhhhh", "h.....h"])
 K_KARASUNO = _kit(ORANGE,BLACK,WHITE,ORANGE,BLACK)
 K_KAGEYAMA = _kit((20,20,26),BLACK,WHITE,ORANGE,BLACK)
 K_NOYA     = _kit((20,20,26),(250,170,60),WHITE,BLACK,BLACK)    # the libero, in the other colour

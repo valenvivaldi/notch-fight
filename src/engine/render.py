@@ -1,6 +1,7 @@
 """Generic scene model + renderer shared by every theme (except DBZ, which predates it)."""
 from .core import *
 from .fx import draw_fx
+from . import loop
 
 GROUND_COLORS={}    # theme -> v -> rgb of the dotted ground line
 BG_DECOR={}         # theme -> fn(draw) extra background decoration
@@ -67,5 +68,8 @@ def callout(s,txt,y=2,c=(255,226,90)):
 def clip(name, n, fn, off=None):
     """Declare a clip: `fn(f)` returns a scene; frames are render(fn(f), f).
     off=True ships it off by default (users turn it on with ./clips.sh); off=False keeps it on in a
-    theme with DEFAULT_OFF = True; None follows the theme."""
-    return (name, n, lambda f: render(fn(f), f), {} if off is None else {'off': off})
+    theme with DEFAULT_OFF = True; None follows the theme.
+    Before each frame it tells engine/loop.py the clip's length, so effects can loop on it."""
+    def frame(f):
+        loop.at(n); return render(fn(f), f)
+    return (name, n, frame, {} if off is None else {'off': off})

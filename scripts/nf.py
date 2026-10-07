@@ -13,6 +13,8 @@
     nf click [close|next]          what a click on the panel does: close it (default) or skip to the next clip
                                    (with "next", a double click closes it)
     nf menu [on|off]               a menu bar icon with all of this (starts at login)
+    nf check [<theme>...]          check themes against the rules: loops, the font, text long enough
+                                   to read and inside the panel (all of them when none is named)
 
 Whether the panel may show right now is decided in one place, `gate()`, which the Claude Code hook
 (scripts/notch-hook.sh) and the app (every few seconds while it is up) both ask: `nf gate` exits 0
@@ -316,6 +318,8 @@ def main(argv):
     if not argv or argv[0] in ('-h', '--help', 'help'): print(__doc__.split('\n\nWhether')[0]); return 0
     cmd, args = argv[0], argv[1:]
     if cmd == 'clips': return clipsmod.main(args)
+    if cmd == 'check':
+        import check; return check.main(args)
     if cmd not in COMMANDS: print(f"nf: unknown command '{cmd}' (nf help)", file=sys.stderr); return 2
     try: COMMANDS[cmd](args)
     except (NfError, clipsmod.ClipsError) as e: print(f'nf: {e}', file=sys.stderr); return 1

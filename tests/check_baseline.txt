@@ -1,0 +1,116 @@
+# problems scripts/check.py already knew about; tests/test_check.py fails only on new ones.
+# Fix one, and drop its line (or rerun: python3 scripts/check.py --baseline).
+amongus__impostor short # IMPOSTORS REMAIN
+amongus__impostor short I WAS IN ELECTRICAL
+amongus__impostor short TASK COMPLETE!
+amongus__impostor short VOTING RESULTS
+amongus__impostor short WHO IS THE IMPOSTOR?
+apex__champion short INTO THE VOID
+apex__champion short SHIELD BROKEN
+arg-colapinto__debut cut off 43
+arg-mate__ronda short ESTA LAVADO
+clippy__deathmatch short ARE YOU SURE?
+clippy__deathmatch short CODE.DOC - WORD
+clippy__deathmatch short END TASK
+clippy__deathmatch short IS NOT
+cs__defuse short BOMB HAS BEEN DEFUSED
+cs__defuse short GO GO GO!
+cs__defuse short THE BOMB HAS BEEN PLANTED
+cyberpunk-edgerunners__moon short GET TO
+cyberpunk-edgerunners__moon short I GOT YOU, DAVID.
+cyberpunk-edgerunners__moon short I'M GONNA
+cyberpunk-edgerunners__moon short THE TOP
+cyberpunk__nightcity short #X CRIT!
+cyberpunk__nightcity short MALORIAN ARMS ####
+cyberpunk__nightcity short WE HAVE A CITY TO BURN.
+cyberpunk__nightcity short YOU'RE DEAD, CHOOM!
+dannyphantom__ghost short I'LL BE BACK, WHELP!
+dannyphantom__ghost short I'LL HAVE YOUR PELT, WHELP!
+dannyphantom__ghost short MISSED ME!
+deadpool__review short +TODO: FIX LATER. MAYBE.
+dexter__lab short BYE BYE!
+dexter__lab short DEE DEE! GET OUT OF MY LABORATORY!
+dexter__lab short LA LA LA!
+dexter__lab short MECH, ACTIVATE!
+dexter__lab short OOOH! WHAT DOES THIS BUTTON DO?
+dexter__lab short OOOH! WHAT DOES THIS DO?
+fightclub__firstrule short ISN'T THAT RULE #?
+fightclub__rules short YOU DO NOT TALK ABOUT FIGHT CLUB
+fma__flame short NOT DONE YET.
+fma__flame short WHICH ONE IS REAL?
+foster__bloo short BET YOU CANT BEAT THIS!
+foster__bloo short COCO! COCO!
+foster__bloo short HE DID IT!
+foster__bloo short IN THE HALL.
+foster__bloo short NO BALLS
+foster__bloo short SORRY! SORRY!
+foster__bloo short YOU'RE ON.
+gta__grove short BUSTED? NOT TODAY
+hl__lambda short HALF LIFE # CONFIRMED
+hl__lambda short MR. FREEMAN.
+hl__lambda short RISE AND SHINE
+hl__lambda short SMELL THE ASHES.
+inv__train short PIENSA CLAUDE!
+inv__train short PIENSA CLAUDE!
+jakelong__dragon short DRAGON UP!
+jakelong__dragon short GOT YOU!
+jakelong__dragon short YO, JAKE! LOOK OUT!
+jjk-maki__zenin short IT ALL
+jjk-toji__sakahoko short INVERTED SPEAR OF HEAVEN
+jjk-toji__sakahoko short SORCERER KILLER
+jojo-diamond__kira short CRAZY DIAMOND!
+jojo-diamond__kira short WHAT A RIDICULOUS HAIRDO.
+jojo-diamond__kira short WHAT DID YOU SAY ABOUT MY HAIR?!
+jojo-golden__requiem short GOLD EXPERIENCE!
+jojo-golden__requiem short KING CRIMSON!
+jojo-golden__requiem short KING CRIMSON!
+jojo-golden__requiem short KING CRIMSON!
+jojo-golden__requiem short RETURN TO ZERO.
+jojo-golden__requiem short TIME HAS BEEN ERASED!
+jojo-stone__heaven short MADE IN HEAVEN!
+jojo__theworld short TOKI WO TOMARE!
+matrix__bullettime short HE IS THE ONE
+mc__enderdragon short THE END
+memes__bossrush short DEAL WITH IT
+memes__bossrush short NEW FRIEND!
+memes__bossrush short TUNG TUNG TUNG
+meshi__dragonstew short # RED DRAGON
+meshi__dragonstew short SIMMER # HRS
+mist__inquisitor short I SEE WHAT COMES
+naruto-edo__edotensei short KAGE BUNSHIN NO JUTSU!
+nrt__shadowclone short IS THAT ALL?
+nrt__shadowclone short NO JUTSU!
+ppg__townsville short BLOSSOM! BUBBLES! BUTTERCUP!
+ppg__townsville short CURSE YOU, POWERPUFF CLAUDE!
+ppg__townsville short I, MOJO JOJO, SHALL DESTROY YOU!
+ppg__townsville short MWA HA HA HA!
+ppg__townsville short THE CITY OF TOWNSVILLE!
+pvz__lastwave short A HUGE WAVE OF ZOMBIES
+pvz__lastwave short BECAUSE IM
+pvz__lastwave short IS APPROACHING!
+pvz__lastwave short RM -RF LAWN
+pvz__lastwave short YOU GOT A
+samuraijack__aku short LONG AGO, IN A DISTANT LAND...
+sf__hadouken short YOU WIN
+simuladores__operativo short CUESTIONARIO DE SATISFACCION
+simuladores__operativo short EL CODIGO
+simuladores__operativo short ERA TODO
+simuladores__operativo short GRACIAS, MUCHACHOS
+simuladores__operativo short INSPECCION FEDERAL!
+simuladores__operativo short LOS VOLVERIA A LLAMAR
+simuladores__operativo short ME ESTAFARON...
+simuladores__operativo short ME QUEDE SIN NADA!
+simuladores__operativo short QUE TAL, AMIGO?
+simuladores__operativo short SERVICE TECNICO
+simuladores__operativo short UN NUEVO CASO
+sonic__greenhill short HO HO HO!
+sonic__greenhill short SUPER CLAUDE
+spongebob__krabby short HEH HEH HEH!
+spongebob__krabby short I'LL GET YOU NEXT TIME!
+spongebob__krabby short KRUSTY KRAB
+spongebob__krabby short MONEY! MONEY! MONEY!
+spongebob__krabby short ORDER UP!
+spongebob__krabby short THE FORMULA WILL BE MINE!
+sw__father short I FIND YOUR LACK OF FAITH DISTURBING
+sw__father short THE FORCE IS STRONG
+term__judgment short HASTA LA VISTA BABY

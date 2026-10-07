@@ -29,68 +29,32 @@ POSES = {   # pose -> (back elbow, back hand, front elbow, front hand, lean, leg
  'wind':  ((-3,2),(-5,0),(-1,3),(-4,0),-1,'stance'),
  'swing': ((4,3),(8,2),(5,3),(9,2),2,'lunge'),
 }
-_put, _seg = put, seg                                               # the engine's (engine/people.py)
 
-def _legs(g,kind,hip,L):
-    """The legs from the hip: standing (stand, stance, lunge) or down (kneel, crouch)."""
-    if kind in ('kneel','crouch'):
-        for k,(kx,fx_) in enumerate((((-1,-6) if kind=='kneel' else (2,-2)),(4,4))):
-            ky=GH-1 if (kind=='kneel' and k==0) else hip+2
-            _seg(g,C-1+k*2,hip,C+kx,ky,'p'); _seg(g,C+kx+1,hip,C+kx+1,ky,'p') if kind=='crouch' else None
-            if kind=='kneel' and k==0: _seg(g,C+kx,GH-1,C+fx_,GH-1,'p'); _put(g,C+fx_-1,GH-1,'k')
-            else:
-                _seg(g,C+kx,ky,C+fx_,GH-2,'p'); _seg(g,C+kx+1,ky,C+fx_+1,GH-2,'p')
-                for x in range(C+fx_,C+fx_+3): _put(g,x,GH-1,'k')
-        return
-    spread={'stand':(-1,1),'stance':(-3,3),'lunge':(-5,5)}[kind]
-    for k,dx in enumerate(spread):
-        for t in range(L):
-            x=C+round(dx*t/(L-1))+(k*2-1); c='k' if t>=L-3 else 'p'
-            _put(g,x,hip+t,c); _put(g,x+1,hip+t,c)
-        _put(g,C+dx+(k*2-1)+2,GH-1,'k')
+def _straps(cols):                                                  # braces, down the vest
+    def paint(g, at):
+        for y in range(at['ty'], at['hip'] + 1):
+            for x in cols: put(g, at['c'] + x + at['sh'](y), y, 'q')
+    return paint
+def _medal(g, at): put(g, at['c'] - 1 + at['sh'](at['ty']), at['ty'] + 2, 'X')
+def _tache_and_scar(g, at):                                         # the moustache; the rope's scar round the neck
+    c, hy, ty, o = at['c'], at['hy'], at['ty'], at['sh'](at['hy'])
+    for x in (c + 1, c + 2, c): put(g, x + o, hy + 3, 'm')
+    for x in (c - 1, c, c + 1): put(g, x + o, ty, 'r')
 
-_built={}
-def build(who,pose):
-    key=(who['name'],pose)
-    if key in _built: return _built[key]
-    g=[['.']*GW for _ in range(GH)]
-    be,bh,fe,fh,lean,legs=POSES[pose]
-    L=who['L']; down=legs in ('kneel','crouch')
-    hip=GH-6 if down else GH-L; ty=hip-7; hy=ty-5
-    _legs(g,legs,hip,L)
-    sh=lambda y: round(lean*(hip-y)/(hip-hy))
-    def arm(e,h,front):
-        sx,sy=C+(2 if front else -2)+sh(ty+1),ty+1
-        ex,ey=C+e[0]+sh(ty),ty+e[1]; hx,hy_=C+h[0]+sh(ty),ty+h[1]
-        _seg(g,sx,sy,ex,ey,who['sleeve'] if front else who['sleeve2']); _seg(g,ex,ey,hx,hy_,who['fore'] if front else who['fore2'])
-        _put(g,hx,hy_,'s'); _put(g,hx+1,hy_,'s')
-    arm(be,bh,False)
-    for y in range(ty,hip+1):
-        o=sh(y)
-        for x in range(C-3+o,C+3+o): _put(g,x,y,'B' if y==hip-1 else 'j')
-        for x in who.get('straps',()): _put(g,C+x+o,y,'q')
-    o=sh(ty);
-    if who.get('medal'): _put(g,C-1+o,ty+2,'X')
-    o=sh(hy)
-    for y in range(hy,hy+5):
-        for x in range(C-2+o,C+3+o): _put(g,x,y,'s')
-    _put(g,C+o,hy+2,'K'); _put(g,C+2+o,hy+2,'K')
-    if who.get('tache'): _put(g,C+1+o,hy+3,'m'); _put(g,C+2+o,hy+3,'m'); _put(g,C+o,hy+3,'m')
-    if who.get('scar'): _put(g,C-1+o,ty,'r'); _put(g,C+o,ty,'r'); _put(g,C+1+o,ty,'r')   # the rope's scar
-    for i,row in enumerate(who['hair']):
-        for j,ch in enumerate(row):
-            if ch!='.': _put(g,C-3+o+j,hy-len(who['hair'])+2+i,ch)
-    arm(fe,fh,True)
-    _built[key]=S([''.join(r) for r in g]); return _built[key]
+def _who(name, L, hair, sleeve='j', back='J', **more):
+    return dict(name=name, w=GW, h=GH, c=C, legs=L, torso=7, hair=hair, hair_y=len(hair) - 2,
+                leg=dict(boot_rows=3, bend=False), body=dict(belt='B'),
+                arm=dict(sleeve=sleeve, back_sleeve=back, fore=sleeve, back_fore=back, hand_w=2), **more)
 
-ALDO   = dict(name='aldo',  L=9, hair=[".hhhhh.","hhhhhhh","hh....."], tache=True, scar=True,
-              sleeve='j',sleeve2='J',fore='j',fore2='J')
-DONNY  = dict(name='donny', L=10,hair=["h.h.h.h","hhhhhhh","hhhhhhh","hh....h"], straps=(-2,1),
-              sleeve='s',sleeve2='S',fore='s',fore2='S')
-SARGE  = dict(name='sarge', L=9, hair=["...cc..",".ccccc.","ccccccc","h.....c"], medal=True,
-              sleeve='j',sleeve2='J',fore='j',fore2='J')
-PRIVATE= dict(name='priv',  L=9, hair=[".ccccc.","ccccccc","h.....h"], sleeve='j',sleeve2='J',fore='j',fore2='J')
-BASTARD= dict(name='bast',  L=9, hair=["..HHH..",".HHHHH.","HHHHHHH"], sleeve='j',sleeve2='J',fore='j',fore2='J')
+def build(who, pose):
+    """Someone in a pose (POSES): engine/people.py's figure()."""
+    return figure(who, POSES[pose])
+
+ALDO   = _who('aldo', 9, [".hhhhh.", "hhhhhhh", "hh....."], paint={'head': [_tache_and_scar]})
+DONNY  = _who('donny', 10, ["h.h.h.h", "hhhhhhh", "hhhhhhh", "hh....h"], 's', 'S', paint={'body': [_straps((-2, 1))]})
+SARGE  = _who('sarge', 9, ["...cc..", ".ccccc.", "ccccccc", "h.....c"], paint={'body': [_medal]})
+PRIVATE= _who('priv', 9, [".ccccc.", "ccccccc", "h.....h"])
+BASTARD= _who('bast', 9, ["..HHH..", ".HHHHH.", "HHHHHHH"])
 APAL = {'s':(226,180,140),'K':INK,'h':(40,30,24),'m':(60,40,28),'r':(170,60,50),'j':(96,96,60),'J':(78,78,48),'B':(70,50,30),
         'p':(150,130,94),'k':(60,40,26)}
 DPAL = {'s':(226,184,150),'S':(200,160,128),'K':INK,'h':(30,24,20),'j':(236,232,220),'B':(70,50,30),'q':(70,56,40),
@@ -101,9 +65,7 @@ BPAL = {'s':(220,176,140),'K':INK,'H':(86,90,56),'j':(100,98,64),'J':(82,80,52),
 
 def hand_xy(x,feet,who,pose,flip=False):
     """Screen position of the front hand (for the bat, the knife)."""
-    _,_,_,h,lean,legs=POSES[pose]; down=legs in ('kneel','crouch')
-    hip=GH-6 if down else GH-who['L']; ty=hip-7; hy=ty-5; o=round(lean*(hip-ty)/(hip-hy))
-    hx=C+h[0]+o; return (x-GW//2+(GW-1-hx) if flip else x-GW//2+hx), feet-GH+ty+h[1]
+    return figure_point(who, POSES[pose], 'hand', x, feet, flip)
 
 # ---- the woods ------------------------------------------------------------------------------------------
 def _woods(d):

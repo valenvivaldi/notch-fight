@@ -28,54 +28,32 @@ ARMS = {    # pose -> (back elbow, back fist, front elbow, front fist), from (C,
  'self':  ((1,4),(4,-2),(7,2),(3,-4),-1,'stance'),
  'down':  ((0,6),(1,8),(2,6),(4,8),0,'stand'),
 }
-_put, _seg = put, seg                                               # the engine's (engine/people.py)
-LEGS = {                                                            # (back foot dx, front foot dx, knee bend)
- 'stance':(-3,3,0),'lunge':(-5,5,1),'reel':(-4,2,0),'stand':(-1,1,0)}
+def _tie(g, at):                                                    # loosened, down the shirt
+    for y in range(at['ty'], at['hip'] - 1): put(g, at['c'] + 1 + at['sh'](y), y, 't')
+def _shirt(g, at):                                                  # under the open jacket
+    for y in range(at['ty'], at['hip'] - 1):
+        for dx in (0, 1): put(g, at['c'] + dx + at['sh'](y), y, 'u')
+def _shades(g, at):
+    o = at['sh'](at['hy'])
+    for x in range(at['c'] - 2 + o, at['c'] + 3 + o): put(g, x, at['hy'] + 2, 'G')
+def _bruise(g, at):                                                 # the black eye
+    c, hy, o = at['c'], at['hy'], at['sh'](at['hy'])
+    for x, y in ((c + 1, hy + 1), (c + 2, hy + 2), (c + 2, hy + 3)): put(g, x + o, y, 'v')
+def _blood(g, at):                                                  # the brow, the nose, the mouth, the shirt
+    c, hy, ty, o = at['c'], at['hy'], at['ty'], at['sh'](at['hy'])
+    for x, y in ((c + 2, hy + 1), (c + 2, hy + 4), (c + 1, hy + 4), (c + 2, hy + 3), (c, hy + 4), (c + 1, ty + 1))[:at['flags'].get('blood', 0) * 2]:
+        put(g, x + o, y, 'r')
 
-_built={}
-def build(who,pose,blood=0):
-    """A fighter: legs, torso (leaning), head, two arms of two segments each with a fist; blood 0..3."""
-    key=(who['name'],pose,blood)
-    if key in _built: return _built[key]
-    g=[['.']*GW for _ in range(GH)]
-    be,bf,fe,ff,lean,legs=ARMS[pose]
-    hip=GH-9; ty=hip-7; hy=ty-5                                      # legs 9 rows, torso 7, head 5
-    bx,fx_,bend=LEGS[legs]
-    for k,(dx,c) in enumerate(((bx,'P'),(fx_,'p'))):                 # the legs, the shoes
-        for t in range(9):
-            fr=t/8; x=C+round(dx*fr)+(bend if 3<t<7 and k==1 else 0)+(k*2-1)
-            _put(g,x,hip+t,c); _put(g,x+1,hip+t,c)
-        _put(g,C+dx+(k*2-1)+2,GH-1,'k'); _put(g,C+dx+(k*2-1),GH-1,'k'); _put(g,C+dx+(k*2-1)+1,GH-1,'k')
-    sh=lambda y: round(lean*(hip-y)/(hip-hy))                       # the lean, more at the top
-    def arm(e,f_,front):
-        sx=C+(2 if front else -2)+sh(ty+1); sy=ty+1
-        ex,ey=C+e[0]+sh(ty),ty+e[1]; fx2,fy2=C+f_[0]+sh(ty),ty+f_[1]
-        _seg(g,sx,sy,ex,ey,'a' if front else 'A'); _seg(g,ex,ey,fx2,fy2,'s' if who['bare'] else ('a' if front else 'A'))
-        for dx,dy in ((0,0),(1,0),(0,1),(1,1)): _put(g,fx2+dx,fy2+dy,'f')
-    arm(be,bf,False)
-    for y in range(ty,hip+1):                                        # the torso, the belt
-        o=sh(y)
-        for x in range(C-3+o,C+3+o): _put(g,x,y,'b' if y==hip-1 else ('w' if y==ty else 'j'))
-        if who['name']=='narr' and y<hip-1: _put(g,C+1+o,y,'t')      # the tie, loosened
-        if who['name']=='tyler' and y<hip-1: _put(g,C+o,y,'u'); _put(g,C+1+o,y,'u')   # the shirt under the open jacket
-    o=sh(hy)
-    for y in range(hy,hy+5):                                         # the head
-        for x in range(C-2+o,C+3+o): _put(g,x,y,'s')
-    _put(g,C+1+o,hy+2,'K'); _put(g,C-1+o,hy+2,'K')
-    if who['name']=='tyler':
-        for x in range(C-2+o,C+3+o): _put(g,x,hy+2,'G')              # the shades
-    else:
-        _put(g,C+1+o,hy+1,'v'); _put(g,C+2+o,hy+2,'v'); _put(g,C+2+o,hy+3,'v')   # the black eye
-    for i,row in enumerate(who['hair']):
-        for j,ch in enumerate(row):
-            if ch!='.': _put(g,C-3+o+j,hy-len(who['hair'])+1+i,ch)
-    for x,y in ((C+2,hy+1),(C+2,hy+4),(C+1,hy+4),(C+2,hy+3),(C,hy+4),(C+1,ty+1))[:blood*2]:   # the brow, the nose, the mouth, the shirt
-        _put(g,x+o,y,'r')
-    arm(fe,ff,True)
-    _built[key]=S([''.join(r) for r in g]); return _built[key]
+def build(who, pose, blood=0):
+    """A fighter in a pose (ARMS), with blood 0..3: engine/people.py's figure()."""
+    return figure(who, ARMS[pose], **({'blood': blood} if blood else {}))
 
-NARRATOR = dict(name='narr', bare=False, hair=["..hhhh.","hhhhhhh","hh....."])
-TYLER    = dict(name='tyler',bare=False, hair=["h.h.h..","hhhhhh.","hhhhhhh","hh....."])
+_FIGHTER = dict(w=GW, h=GH, c=C, legs=9, torso=7, eyes=(-1, 1), leg=dict(back='P'), body=dict(top='w', belt='b'),
+                arm=dict(sleeve='a', back_sleeve='A', fore='a', back_fore='A', fist=2))
+NARRATOR = dict(_FIGHTER, name='narr', hair=["..hhhh.", "hhhhhhh", "hh....."], hair_y=2,
+                paint={'body': [_tie], 'head': [_bruise], 'face': [_blood]})
+TYLER    = dict(_FIGHTER, name='tyler', hair=["h.h.h..", "hhhhhh.", "hhhhhhh", "hh....."], hair_y=3,
+                paint={'body': [_shirt], 'head': [_shades], 'face': [_blood]})
 CPAL = {'s':(232,192,160),'K':INK,'h':(70,46,32),'j':(232,228,216),'w':(250,248,240),'A':(200,196,186),'a':(232,228,216),
         't':(110,24,28),'b':(40,30,26),'p':(64,64,70),'P':(50,50,56),'k':(24,20,20),'f':(232,192,160),'v':(110,60,120),'r':BLOOD}
 TPAL = {'s':(232,196,166),'K':INK,'G':(12,12,14),'h':(204,170,110),'j':(168,40,30),'w':(120,24,18),'A':(130,28,20),'a':(168,40,30),

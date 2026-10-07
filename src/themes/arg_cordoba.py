@@ -32,48 +32,36 @@ POSES = {   # pose -> (back elbow, back hand, front elbow, front hand, lean, leg
  'walk1': ((-1,3),(-2,6),(3,3),(4,6),0,'stance'),
  'walk2': ((-1,3),(0,6),(3,3),(2,6),0,'stand'),
 }
-_put, _seg = put, seg                                               # the engine's (engine/people.py)
 
 L_, T_ = 8, 6
 HIP=GH-L_; TY=HIP-T_; HY=TY-5
-_built={}
-def build(who,pose):
-    key=(who['name'],pose)
-    if key in _built: return _built[key]
-    g=[['.']*GW for _ in range(GH)]
-    be,bh,fe,fh,lean,legs=POSES[pose]
-    spread={'stand':(-1,1),'stance':(-3,3)}[legs]
-    for k,dx in enumerate(spread):
-        for t in range(L_):
-            x=C+round(dx*t/(L_-1))+(k*2-1); c='k' if t==L_-1 else ('s' if who.get('skirt') and t>=4 else 'p')
-            _put(g,x,HIP+t,c); _put(g,x+1,HIP+t,c)
-        _put(g,C+dx+(k*2-1)+2,GH-1,'k')
-    if who.get('skirt'):
-        for t in range(4):
-            for x in range(C-3-t//2,C+4+t//2): _put(g,x,HIP+t,'j')
-    sh=lambda y: round(lean*(HIP-y)/(HIP-HY))
-    def arm(e,h,front):
-        sx,sy=C+(2 if front else -2)+sh(TY+1),TY+1
-        ex,ey=C+e[0]+sh(TY),TY+e[1]; hx,hy=C+h[0]+sh(TY),TY+h[1]
-        _seg(g,sx,sy,ex,ey,'j' if who.get('sleeves') else 's'); _seg(g,ex,ey,hx,hy,'s'); _put(g,hx,hy,'s')
-    arm(be,bh,False)
-    for y in range(TY,HIP+1):
-        o=sh(y)
-        for x in range(C-3+o,C+3+o):
-            c='j'
-            if who.get('stripes') and (x-o)%2: c='J'                   # Talleres: blue and white stripes
-            if y==HIP and not who.get('skirt'): c='b'
-            if who.get('bare') and y<HIP-1: c='s' if not (y==TY+2 and (x-o) in (C-2,C+1)) else 'n'   # bare chest
-            _put(g,x,y,c)
-    o=sh(HY)
-    for y in range(HY,HY+5):
-        for x in range(C-2+o,C+3+o): _put(g,x,y,'s')
-    _put(g,C+o,HY+2,'K'); _put(g,C+2+o,HY+2,'K'); _put(g,C+1+o,HY+4,'m')
-    for i,row in enumerate(who['hair']):
-        for j,ch in enumerate(row):
-            if ch!='.': _put(g,C+who.get('hx',-3)+o+j,HY-who.get('hy',2)+i,ch)
-    arm(fe,fh,True)
-    _built[key]=S([''.join(r) for r in g]); return _built[key]
+def _skirt(g, at):                                                  # a skirt over the thighs, bare legs below
+    c, hip, L = at['c'], at['hip'], at['L']
+    for y in range(hip + 4, hip + L - 1): g[y] = ['s' if ch == 'p' else ch for ch in g[y]]
+    for t in range(4):
+        for x in range(c - 3 - t // 2, c + 4 + t // 2): put(g, x, hip + t, 'j')
+def _stripes(g, at):                                                # Talleres: blue and white
+    for y in range(at['ty'], at['hip']):
+        o = at['sh'](y)
+        for x in range(at['c'] - 3 + o, at['c'] + 3 + o):
+            if (x - o) % 2: put(g, x, y, 'J')
+def _bare(g, at):                                                   # bare-chested
+    c, ty = at['c'], at['ty']
+    for y in range(ty, at['hip'] - 1):
+        o = at['sh'](y)
+        for x in range(c - 3 + o, c + 3 + o): put(g, x, y, 'n' if y == ty + 2 and (x - o) in (c - 2, c + 1) else 's')
+def _mouth(g, at): put(g, at['c'] + 1 + at['sh'](at['hy']), at['hy'] + 4, 'm')
+
+def person(name, hair, sleeves=False, skirt=False, stripes=False, bare=False, hx=-3, hy=2):
+    """A dancer, a musician, Claude: engine/people.py's body spec for figure()."""
+    return dict(name=name, w=GW, h=GH, c=C, legs=L_, torso=T_, hair=hair, hair_x=hx, hair_y=hy,
+                body=dict(hip=None if skirt else 'b'), arm=dict(sleeve='j' if sleeves else 's'),
+                paint={'legs': [_skirt] if skirt else [], 'body': ([_stripes] if stripes else []) + ([_bare] if bare else []),
+                       'head': [_mouth]})
+
+def build(who, pose):
+    """Someone in a pose (POSES): engine/people.py's figure()."""
+    return figure(who, POSES[pose])
 
 def hand_xy(x,feet,pose,flip=False):
     _,_,_,h,lean,_=POSES[pose]; o=round(lean*(HIP-TY)/(HIP-HY))
@@ -81,22 +69,22 @@ def hand_xy(x,feet,pose,flip=False):
 
 SHORT=["..hhh..",".hhhhh.","hhhhhhh","h.....h"]
 LONG =["..hhh..",".hhhhh.","hhhhhhh","hh...hh","h.....h","h.....h","h.....h"]
-CLAUDE = dict(name='claude',hair=SHORT,sleeves=True)
+CLAUDE = person('claude', SHORT, sleeves=True)
 CPAL = {'s':(226,180,140),'K':INK,'m':(170,80,70),'h':(40,28,22),'j':CELESTE,'b':(40,40,60),'p':(46,56,90),'k':(240,240,240)}
 DANCERS = [   # (who, palette): the ronda, couple by couple
- (dict(name='d1',hair=LONG,skirt=True),{'s':(232,190,156),'K':INK,'m':(200,60,80),'h':(30,22,18),'j':(220,40,90),'p':(40,30,30),'k':(30,20,20)}),
- (dict(name='d2',hair=SHORT,stripes=True,sleeves=True),{'s':(210,160,120),'K':INK,'m':(150,70,60),'h':(26,20,16),'j':(30,50,120),'J':(240,240,240),'b':(30,30,40),'p':(40,44,60),'k':(240,240,240)}),
- (dict(name='d3',hair=LONG,skirt=True),{'s':(220,176,140),'K':INK,'m':(200,60,80),'h':(150,90,40),'j':(250,200,40),'p':(40,30,30),'k':(30,20,20)}),
- (dict(name='d4',hair=SHORT,sleeves=True),{'s':(200,150,110),'K':INK,'m':(150,70,60),'h':(20,16,12),'j':(240,240,240),'b':(30,30,40),'p':(60,50,40),'k':(30,26,22)}),
- (dict(name='d5',hair=LONG,skirt=True),{'s':(236,200,170),'K':INK,'m':(200,60,80),'h':(60,30,20),'j':(40,170,150),'p':(40,30,30),'k':(30,20,20)}),
- (dict(name='d6',hair=SHORT,sleeves=True),{'s':(214,170,130),'K':INK,'m':(150,70,60),'h':(30,24,20),'j':CELESTE,'b':(30,30,40),'p':(40,44,60),'k':(240,240,240)}),
- (dict(name='d7',hair=LONG,skirt=True),{'s':(226,184,150),'K':INK,'m':(200,60,80),'h':(20,16,14),'j':(150,70,200),'p':(40,30,30),'k':(30,20,20)}),
- (dict(name='d8',hair=SHORT,stripes=True,sleeves=True),{'s':(230,186,150),'K':INK,'m':(150,70,60),'h':(90,60,30),'j':(30,50,120),'J':(240,240,240),'b':(30,30,40),'p':(40,44,60),'k':(30,26,22)}),
+ (person('d1',LONG,skirt=True),{'s':(232,190,156),'K':INK,'m':(200,60,80),'h':(30,22,18),'j':(220,40,90),'p':(40,30,30),'k':(30,20,20)}),
+ (person('d2',hair=SHORT,stripes=True,sleeves=True),{'s':(210,160,120),'K':INK,'m':(150,70,60),'h':(26,20,16),'j':(30,50,120),'J':(240,240,240),'b':(30,30,40),'p':(40,44,60),'k':(240,240,240)}),
+ (person('d3',hair=LONG,skirt=True),{'s':(220,176,140),'K':INK,'m':(200,60,80),'h':(150,90,40),'j':(250,200,40),'p':(40,30,30),'k':(30,20,20)}),
+ (person('d4',hair=SHORT,sleeves=True),{'s':(200,150,110),'K':INK,'m':(150,70,60),'h':(20,16,12),'j':(240,240,240),'b':(30,30,40),'p':(60,50,40),'k':(30,26,22)}),
+ (person('d5',hair=LONG,skirt=True),{'s':(236,200,170),'K':INK,'m':(200,60,80),'h':(60,30,20),'j':(40,170,150),'p':(40,30,30),'k':(30,20,20)}),
+ (person('d6',hair=SHORT,sleeves=True),{'s':(214,170,130),'K':INK,'m':(150,70,60),'h':(30,24,20),'j':CELESTE,'b':(30,30,40),'p':(40,44,60),'k':(240,240,240)}),
+ (person('d7',hair=LONG,skirt=True),{'s':(226,184,150),'K':INK,'m':(200,60,80),'h':(20,16,14),'j':(150,70,200),'p':(40,30,30),'k':(30,20,20)}),
+ (person('d8',hair=SHORT,stripes=True,sleeves=True),{'s':(230,186,150),'K':INK,'m':(150,70,60),'h':(90,60,30),'j':(30,50,120),'J':(240,240,240),'b':(30,30,40),'p':(40,44,60),'k':(30,26,22)}),
 ]
-BAND = [(dict(name='keys',hair=SHORT,sleeves=True),{'s':(214,170,130),'K':INK,'m':(150,70,60),'h':(20,16,14),'j':(30,30,36),'b':(20,20,24),'p':(30,30,36),'k':(20,20,24)}),
-        (dict(name='mona',bare=True,hx=-5,hy=4,hair=["..h.h.h.h..",".hhhhhhhhh.","hhhhhhhhhhh","hhhhhhhhhhh","hhh.....hhh","hh.......hh","hh.......hh","hhh.....hhh",".hh.....hh."]),   # La Mona Jiménez
+BAND = [(person('keys',hair=SHORT,sleeves=True),{'s':(214,170,130),'K':INK,'m':(150,70,60),'h':(20,16,14),'j':(30,30,36),'b':(20,20,24),'p':(30,30,36),'k':(20,20,24)}),
+        (person('mona',bare=True,hx=-5,hy=4,hair=["..h.h.h.h..",".hhhhhhhhh.","hhhhhhhhhhh","hhhhhhhhhhh","hhh.....hhh","hh.......hh","hh.......hh","hhh.....hhh",".hh.....hh."]),   # La Mona Jiménez
          {'s':(214,160,120),'n':(150,90,60),'K':INK,'m':(120,50,40),'h':(26,20,18),'j':(214,160,120),'b':(240,240,240),'p':(20,20,24),'k':(20,20,24)}),
-        (dict(name='perc',hair=SHORT),{'s':(200,150,110),'K':INK,'m':(150,70,60),'h':(40,30,24),'j':(240,240,240),'b':(20,20,24),'p':(30,30,36),'k':(20,20,24)})]
+        (person('perc',hair=SHORT),{'s':(200,150,110),'K':INK,'m':(150,70,60),'h':(40,30,24),'j':(240,240,240),'b':(20,20,24),'p':(30,30,36),'k':(20,20,24)})]
 
 
 # ---- the hall -------------------------------------------------------------------------------------------

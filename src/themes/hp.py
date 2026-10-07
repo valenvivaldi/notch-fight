@@ -25,49 +25,35 @@ POSES = {   # (back elbow, back hand, front elbow, front hand, lean, legs), from
 }
 L_, T_ = 9, 7
 HIP=GH-L_; TY=HIP-T_; HY=TY-5
-_put, _seg = put, seg                                               # the engine's (engine/people.py)
 
-_built={}
-def build(who,pose):
-    key=(who,pose)
-    if key in _built: return _built[key]
-    g=[['.']*GW for _ in range(GH)]
-    be,bh,fe,fh,lean,legs=POSES[pose]
-    spread={'stand':(-1,1),'stance':(-3,3),'lunge':(-5,5)}[legs]
-    robe=who=='voldemort'
-    for k,dx in enumerate(spread):
-        for t in range(L_):
-            x=C+round(dx*t/(L_-1))+(k*2-1); _put(g,x,HIP+t,'k' if t==L_-1 else 'p'); _put(g,x+1,HIP+t,'k' if t==L_-1 else 'p')
-    if robe:                                                         # the robes, sweeping to the ground
-        for t in range(L_-1):
-            w=3+t//2
-            for x in range(C-w,C+w+1): _put(g,x,HIP+t,'j' if (x+t)%5 else 'J')
-    sh=lambda y: round(lean*(HIP-y)/(HIP-HY))
-    def arm(e,h,front):
-        sx,sy=C+(2 if front else -2)+sh(TY+1),TY+1
-        ex,ey=C+e[0]+sh(TY),TY+e[1]; hx,hy=C+h[0]+sh(TY),TY+h[1]
-        _seg(g,sx,sy,ex,ey,'j' if front else 'J'); _seg(g,ex,ey,hx,hy,'j' if front else 'J'); _put(g,hx,hy,'s')
-    arm(be,bh,False)
-    for y in range(TY,HIP+1):
-        o=sh(y)
-        for x in range(C-3+o,C+3+o): _put(g,x,y,'j')
-        if not robe and y<TY+3:                                      # the scarf: red and gold
-            for x in range(C-2+o,C+2+o): _put(g,x,y,'r' if (x+y)%2 else 'y')
-        if not robe and y==TY+3: _put(g,C+1+o,y,'r'); _put(g,C+1+o,y+1,'y')   # its end hanging
-    o=sh(HY)
-    for y in range(HY,HY+5):
-        for x in range(C-2+o,C+3+o): _put(g,x,y,'s')
-    if robe:                                                         # no hair, the slit nose, red eyes
-        for x in range(C-2+o,C+3+o): _put(g,x,HY-1,'s')
-        _put(g,C+o,HY+2,'e'); _put(g,C+2+o,HY+2,'e'); _put(g,C+1+o,HY+3,'n')
-    else:
-        for x in range(C-1+o,C+3+o): _put(g,x,HY+2,'G')              # the round glasses
-        _put(g,C+o,HY+2,'K'); _put(g,C+2+o,HY+2,'K'); _put(g,C-1+o,HY+1,'z')   # the scar
-        for i,row in enumerate(["..h.h.h",".hhhhhh","hhhhhhh","hhh.h.."]):
-            for j,ch in enumerate(row):
-                if ch!='.': _put(g,C-3+o+j,HY-2+i,ch)
-    arm(fe,fh,True)
-    _built[key]=S([''.join(r) for r in g]); return _built[key]
+def _robe(g, at):                                                   # sweeping to the ground
+    c, hip, L = at['c'], at['hip'], at['L']
+    for t in range(L - 1):
+        w = 3 + t // 2
+        for x in range(c - w, c + w + 1): put(g, x, hip + t, 'j' if (x + t) % 5 else 'J')
+def _scarf(g, at):                                                  # red and gold, its end hanging
+    c, ty, sh = at['c'], at['ty'], at['sh']
+    for y in range(ty, ty + 3):
+        for x in range(c - 2 + sh(y), c + 2 + sh(y)): put(g, x, y, 'r' if (x + y) % 2 else 'y')
+    o = sh(ty + 3); put(g, c + 1 + o, ty + 3, 'r')
+def _glasses(g, at):                                                # round glasses, the eyes through them, the scar
+    c, hy, o = at['c'], at['hy'], at['sh'](at['hy'])
+    for x in range(c - 1 + o, c + 3 + o): put(g, x, hy + 2, 'G')
+    put(g, c + o, hy + 2, 'K'); put(g, c + 2 + o, hy + 2, 'K'); put(g, c - 1 + o, hy + 1, 'z')
+def _no_nose(g, at):                                                # no hair, the slit nose
+    c, hy, o = at['c'], at['hy'], at['sh'](at['hy'])
+    for x in range(c - 2 + o, c + 3 + o): put(g, x, hy - 1, 's')
+    put(g, c + 1 + o, hy + 3, 'n')
+
+_BODY = dict(w=GW, h=GH, c=C, legs=L_, torso=T_, leg=dict(toe=False, bend=False),
+             arm=dict(sleeve='j', back_sleeve='J', fore='j', back_fore='J'))
+HARRY = dict(_BODY, name='harry', hair=["..h.h.h", ".hhhhhh", "hhhhhhh", "hhh.h.."], hair_y=2,
+             paint={'body': [_scarf], 'head': [_glasses]})
+VOLDEMORT = dict(_BODY, name='voldemort', eye='e', paint={'legs': [_robe], 'head': [_no_nose]})
+
+def build(who, pose):
+    """Harry or Voldemort in a pose (POSES): engine/people.py's figure()."""
+    return figure(HARRY if who == 'harry' else VOLDEMORT, POSES[pose])
 
 HPAL = {'s':(236,200,170),'K':INK,'G':(40,40,44),'z':(200,60,60),'h':(30,24,24),'j':(36,34,44),'J':(26,24,32),
         'r':(170,30,36),'y':(230,180,50),'p':(60,60,70),'k':(24,20,20)}
