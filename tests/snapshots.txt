@@ -34,6 +34,7 @@ deadpool__webcam 25f55acefd9893e3
 dexter__lab 1ef885f6b960b513
 dnd__nat1 ceb611bbe9392f20
 dnd__nat20 809eaef6ad59a2d0
+dross__top7 774d71f026ac6acc
 ds__felled 6ed5d53d93288fca
 etendo__rebrand c9fbfa354b0774ee
 eternauta__nevada b674e5ea1e749a43
@@ -103,6 +104,9 @@ terraria__summoner eb43c009e304bb35
 tetris__tetris 441cddac3a59be4a
 thebear__service 4b170828347a89f3
 thisisfine__fine a33118cb65f663bc
+tresacordes__fristail e9c50f6dc092a516
+tresacordes__poema e2286c468977d4b6
+tresacordes__sentido c92696bb81ecd178
 wednesday__wednesday 9514104431e9db2a
 xmen-gambit__charged d3d7c596e1a8e36c
 xmen-nightcrawler__bamf 023f53c52a318a7d
