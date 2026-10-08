@@ -13,10 +13,15 @@
     nf click [close|next]          what a click on the panel does: close it (default) or skip to the next clip
                                    (with "next", a double click closes it)
     nf menu [on|off]               a menu bar icon with all of this (starts at login)
+    nf stats [reset]               what has played, how long the panel was up, how often Claude waited for you
     nf resident [on|off]           keep the app up, hidden, between prompts so it shows at once (on, the
                                    default; "on" also starts it at login), or quit it each time (off)
     nf check [<theme>...]          check themes against the rules: loops, the font, text long enough
                                    to read and inside the panel (all of them when none is named)
+    nf new-theme <id> [--sub-of <theme>] [--people] [--2.5d] [--no-fight]
+                                   a skeleton for a new theme that starts out right (src/themes/<id>.py, its
+                                   README rows, then nf check and a contact sheet); --people: figure() and
+                                   POSES, --2.5d: a Stage, --no-fight: a calm scene
 
 Whether the panel may show right now is decided by `gate()`, which the Claude Code hook
 (scripts/notch-hook.sh) asks: `nf gate` exits 0 when it may show, 1 when it may not, and prints why.
@@ -35,6 +40,7 @@ import clips as clipsmod                                              # noqa: E4
 CONFIG = clipsmod.CONFIG
 STATE_DIR = os.path.dirname(CONFIG)
 PAUSED = os.path.join(STATE_DIR, 'paused')
+STATE = os.path.join(STATE_DIR, 'state.json')                         # the app's: rotation + stats
 SESSIONS = os.path.expanduser('~/.config/notch-fight/sessions')
 APP = os.path.join(ROOT, 'build', 'NotchFight.app')
 MENU_APP = os.path.join(ROOT, 'build', 'NotchFightMenu.app')
@@ -155,6 +161,11 @@ def app_running(): return subprocess.run(['pgrep', '-x', 'NotchFight'], capture_
 def hide_app(): subprocess.run(['pkill', '-x', 'NotchFight'], capture_output=True)
 def poke_app(): subprocess.run(['pkill', '-USR1', '-x', 'NotchFight'], capture_output=True)   # look again now
 def resident(cfg=None): return (load_cfg() if cfg is None else cfg).get('resident', True) is not False
+def gate_changed(cfg):
+    """After a change to the gate's settings: a resident app looks again (it hides or comes back by
+    itself; never killed); a non-resident one is closed if it may not show any more."""
+    if resident(cfg): poke_app()
+    elif not gate(cfg)[0]: hide_app()
 def show_app(*args): subprocess.run(['open', '-g', APP, *(['--args', *args] if args else [])], capture_output=True)
 
 # ---- commands ----------------------------------------------------------------------------------------
@@ -188,6 +199,21 @@ def sessions_line():
     n, w = live_sessions(waiting=True)
     return f'{n} working' + (f', {w} waiting for you' if w else '')
 
+def hook_state(claude_dir):
+    """Our hooks in a Claude profile: None (none), 'current', 'old: run ./install.sh' (no waiting alert
+    yet), or 'another copy: <dir>' (they run a different checkout's notch-hook.sh)."""
+    try:
+        with open(os.path.join(claude_dir, 'settings.json')) as fh: hooks = json.load(fh).get('hooks', {})
+    except (OSError, ValueError): return None
+    cmds = [h.get('command', '') for groups in hooks.values() for g in groups for h in g.get('hooks', [])]
+    ours = [c for c in cmds if 'notch-hook.sh' in c]
+    if not ours: return None
+    here = os.path.join(HERE, 'notch-hook.sh')
+    if not any(here in c for c in ours):
+        other = next((w.strip("'\"") for c in ours for w in c.split() if w.strip("'\"").endswith('notch-hook.sh')), '?')
+        return f"another copy: {os.path.dirname(os.path.dirname(other)).replace(os.path.expanduser('~'), '~')}"
+    return 'current' if any(c.endswith(' work') for c in ours) else 'old: run ./install.sh'
+
 def cmd_status(args):
     cfg = load_cfg(); ok, why = gate(cfg)
     until = paused_until()
@@ -200,18 +226,16 @@ def cmd_status(args):
         act = clipsmod.active(cfg, names, off); clip_line = f'{len(act)}/{len(names)} active ({clipsmod.mode_of(cfg)} mode for new clips)'
     except clipsmod.ClipsError as e: clip_line = str(e)
     from hooks import claude_dirs
-    def has_hook(d):
-        try: return 'notch-hook.sh' in open(os.path.join(d, 'settings.json')).read()
-        except OSError: return False
     import glob
     dirs = sorted(set(claude_dirs()) | set(glob.glob(os.path.expanduser('~/.claude*'))))   # every profile on this Mac
-    hooked = [d for d in dirs if os.path.isdir(d) and has_hook(d)]
+    hooked = [(d, st) for d in dirs if os.path.isdir(d) and (st := hook_state(d))]
     rows = [('now', 'may show' if ok else f'hidden: {why}'), ('paused', pause), ('quiet hours', quiet),
             ('when sharing', share), ('delay', f"{cfg.get('delay')} s" if cfg.get('delay') else 'off'),
             ('click', 'next clip (double click closes)' if cfg.get('click') == 'next' else 'closes it'),
             ('menu icon', ('on' if os.path.exists(AGENT) else 'off') + (' (running)' if menu_running() else '')),
             ('resident', ('on' if resident(cfg) else 'off') + (', starts at login' if os.path.exists(APP_AGENT) else '')), ('clips', clip_line), ('scale', str(cfg.get('scale', 1))),
-            ('hooks', ', '.join(d.replace(os.path.expanduser('~'), '~') for d in hooked) or 'not installed (./install.sh)'),
+            ('hooks', ', '.join(d.replace(os.path.expanduser('~'), '~') + ('' if st == 'current' else f' ({st})') for d, st in hooked)
+                      or 'not installed (./install.sh)'),
             ('sessions', sessions_line()), ('app', ('running' if app_running() else 'built') if os.path.isdir(APP) else 'not built (./build.sh)')]
     for k, v in rows: print(f'  {k:<15}{v}')
 
@@ -239,12 +263,12 @@ def cmd_quiet(args):
     cfg = load_cfg()
     if not args:
         q = cfg.get('quiet'); print('Quiet hours: off' if not q else f"Quiet hours: {q['from']}-{q['to']} ({q.get('days', 'all')})"); return
-    if args[0] == 'off': cfg.pop('quiet', None); save_cfg(cfg); print('Quiet hours: off'); return
+    if args[0] == 'off': cfg.pop('quiet', None); save_cfg(cfg); print('Quiet hours: off'); gate_changed(cfg); return
     f, t = parse_quiet(args[0]); days = args[1] if len(args) > 1 else 'all'
     if days not in ('all', 'weekdays'): raise NfError("days: 'all' or 'weekdays'")
     cfg['quiet'] = {'from': f, 'to': t, 'days': days}; save_cfg(cfg)
     print(f"Quiet hours: {f}-{t}, {'Monday to Friday' if days == 'weekdays' else 'every day'}")
-    if not gate(cfg)[0]: hide_app()
+    gate_changed(cfg)
 
 SHARE_WORDS = {'hide': True, 'show': False, 'on': True, 'off': False}   # on/off: older spelling of hide/show
 
@@ -256,7 +280,7 @@ def cmd_share(args):
     if args[0] not in SHARE_WORDS: raise NfError('nf share hide|show (hide the panel while sharing, or keep showing it)')
     cfg['pauseOnShare'] = SHARE_WORDS[args[0]]; save_cfg(cfg)
     print(f"While sharing the screen: {share_line(cfg['pauseOnShare'])}")
-    if cfg['pauseOnShare'] and not gate(cfg)[0]: hide_app()
+    gate_changed(cfg)
 
 def parse_seconds(s):
     s = s.strip().lower()
@@ -375,6 +399,60 @@ def cmd_resident(args):
         print('Resident: off (the app starts on each prompt and quits when it retracts)')
     else: raise NfError('nf resident on|off')
 
+def load_state():
+    try:
+        with open(STATE) as fh: return json.load(fh)
+    except (OSError, ValueError): return {}
+
+def fmt_secs(s):
+    s = int(s); h, m = s // 3600, s % 3600 // 60
+    return f'{h} h {m:02d} min' if h else f'{m} min' if m else f'{s} s'
+
+def stats_summary(st=None, today=None):
+    """The numbers nf stats and the menu show, from state.json (written by the app)."""
+    st = load_state() if st is None else st
+    stats = st.get('stats', {}); today = today or datetime.date.today()
+    week = {(today - datetime.timedelta(days=i)).isoformat() for i in range(7)}
+    def span(key):
+        per = stats.get(key, {})
+        return per.get(today.isoformat(), 0), sum(v for d, v in per.items() if d in week), sum(per.values())
+    plays = stats.get('plays', {})
+    themes = {}
+    for clip, n in plays.items(): themes[clipsmod.theme_of(clip)] = themes.get(clipsmod.theme_of(clip), 0) + n
+    top = lambda d, k: sorted(d.items(), key=lambda kv: (-kv[1], kv[0]))[:k]
+    return {'shown': span('shown'), 'waits': span('waits'), 'plays': sum(plays.values()), 'clips': len(plays),
+            'top_clips': top(plays, 5), 'top_themes': top(themes, 3), 'round': len(st.get('rotation', {}).get('played', []))}
+
+def stats_lines(sm):
+    sh, wa = sm['shown'], sm['waits']
+    lines = [f'Panel up: {fmt_secs(sh[0])} today, {fmt_secs(sh[1])} this week, {fmt_secs(sh[2])} in all',
+             f'Claude waited for you: {wa[0]} today, {wa[1]} this week, {wa[2]} in all',
+             f"Clips played: {sm['plays']} ({sm['clips']} different; {sm['round']} so far this round)"]
+    if sm['top_themes']: lines.append('Top themes: ' + ', '.join(f'{t} ({n})' for t, n in sm['top_themes']))
+    if sm['top_clips']: lines.append('Top clips: ' + ', '.join(f'{c} ({n})' for c, n in sm['top_clips']))
+    return lines
+
+def cmd_stats(args):
+    if args == ['reset']:
+        st = load_state(); st.pop('stats', None)
+        os.makedirs(STATE_DIR, exist_ok=True); tmp = STATE + '.tmp'
+        with open(tmp, 'w') as fh: json.dump(st, fh, indent=2)
+        os.replace(tmp, STATE); print('Stats reset (the rotation is kept)'); return
+    if args: raise NfError('nf stats [reset]')
+    for l in stats_lines(stats_summary()): print(f'  {l}')
+
+def cmd_menu_data(args):
+    """For the menu bar icon, in one go: every theme with on / off / some, and the stats lines."""
+    themes = []
+    try:
+        clips = clipsmod.clip_names(clipsmod.CLIPS_DIR); cfg = load_cfg(); off = clipsmod.default_off(clipsmod.CLIPS_DIR)
+        on = clipsmod.active(cfg, clips, off)
+        for t in sorted({clipsmod.theme_of(c) for c in clips}):
+            mine = [c for c in clips if clipsmod.theme_of(c) == t]; n = sum(c in on for c in mine)
+            themes.append([t, 'on' if n == len(mine) else 'off' if n == 0 else 'some'])
+    except clipsmod.ClipsError: pass
+    print(json.dumps({'themes': themes, 'stats': stats_lines(stats_summary())}))
+
 def cmd_themes(args):
     """For the menu: one theme per line (from the build)."""
     for t in sorted({clipsmod.theme_of(c) for c in clipsmod.clip_names(clipsmod.CLIPS_DIR)}): print(t)
@@ -385,7 +463,7 @@ def cmd_gate(args):
 COMMANDS = {'pause': cmd_pause, 'resume': cmd_resume, 'status': cmd_status, 'preview': cmd_preview,
             'quiet': cmd_quiet, 'share': cmd_share, 'gate': cmd_gate, '_after_preview': cmd_after_preview,
             'delay': cmd_delay, 'click': cmd_click, 'menu': cmd_menu, '_show': cmd_show, '_wait': cmd_wait, '_show_later': cmd_show_later,
-            '_themes': cmd_themes, 'resident': cmd_resident}
+            '_themes': cmd_themes, 'resident': cmd_resident, 'stats': cmd_stats, '_menu': cmd_menu_data}
 
 def main(argv):
     if not argv or argv[0] in ('-h', '--help', 'help'): print(__doc__.split('\n\nWhether')[0]); return 0
@@ -393,6 +471,8 @@ def main(argv):
     if cmd == 'clips': return clipsmod.main(args)
     if cmd == 'check':
         import check; return check.main(args)
+    if cmd == 'new-theme':
+        import new_theme; return new_theme.main(args)
     if cmd not in COMMANDS: print(f"nf: unknown command '{cmd}' (nf help)", file=sys.stderr); return 2
     try: COMMANDS[cmd](args)
     except (NfError, clipsmod.ClipsError) as e: print(f'nf: {e}', file=sys.stderr); return 1

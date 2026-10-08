@@ -224,25 +224,28 @@ def closeup_fernet(t,f):
     return im
 
 # ---- the clip -------------------------------------------------------------------------------------------
-def ronda_pos(a):
+# (engine/stage25.py: no vanishing point, x is the screen x; the ronda is an ellipse on the floor, z 0.5 +- 0.5;
+# the far half, z < 0.5, is drawn smaller)
+ST = Stage(far_y=RC[1]-RY, near_y=RC[1]+RY, far_below=0.5)
+def ronda_pos(a):                                                   # screen (x, y): ST.ring + feet(z) differs in the last bit
     return RC[0]+RX*math.cos(a), RC[1]+RY*math.sin(a)
 
 def clip_fernet(f):
     s=scene(f,THEME)
     if 140<=f<220: s['image']=closeup_fernet((f-140)/80,f); return s
     s['under']+=[('co_lights',),('co_sign',)]
-    figs=[]                                                          # (y, actor)
+    figs=[]                                                          # (z, actor)
     # the ronda, couple by couple, going round (one turn per 240 frames)
     for i,(who,pal) in enumerate(DANCERS):
         a=2*math.pi*(f%240)/240+i*2*math.pi/len(DANCERS)
-        x,y=ronda_pos(a); far=y<RC[1]
+        x,y=ronda_pos(a); z=ST.depth(y)
         pose='dance1' if (f//6+i)%2 else 'dance2'
-        spr=build(who,pose); figs.append((y,actor(shrink(spr) if far else spr,x,y,flip=math.sin(a)>0,pal=pal)))
+        figs.append((z,ST.place_at(build(who,pose),x,y,flip=math.sin(a)>0,pal=pal)))
     for k,(x,(who,pal)) in enumerate(zip((110,144,170),BAND)):        # the band, up on the stage
         pose='dance1' if (f//8+k)%2 else 'dance2'
         if who['name']=='mona':                                      # La Mona, front and centre, full size
-            pose='up' if (f//12)%2 else 'dance1'; figs.append((31,actor(build(who,pose),x,31,pal=pal))); continue
-        figs.append((30,actor(shrink(build(who,pose)),x,30,flip=k==2,pal=pal)))
+            pose='up' if (f//12)%2 else 'dance1'; figs.append((ST.depth(31),actor(build(who,pose),x,31,pal=pal))); continue
+        figs.append((ST.depth(30),ST.place_at(build(who,pose),x,30,flip=k==2,pal=pal)))
     # Claude: ice, fernet, Coca; then up, the ronda, down it in one, back to the bar
     cx,cy,pose,flip=CX,GROUND,'stand',True
     level,foam,ice=0.0,0.0,0; held=False
@@ -274,8 +277,8 @@ def clip_fernet(f):
         p1=ronda_pos(math.pi*1.6); t=(f-400)/40; cx,cy=lerp(p1[0],CX,t),lerp(p1[1],GROUND,t); pose='walk1' if (f//4)%2 else 'walk2'; held=True; flip=True
     if 440<=f<448: pose='reach'; ice=0
     if 400<=f<440: ice=0; level=foam=0
-    me=build(CLAUDE,pose); figs.append((cy,actor(shrink(me) if cy<RC[1] else me,cx,cy,flip=flip,pal=CPAL)))
-    s['actors']=[a for _,a in sorted(figs,key=lambda t:t[0])]
+    figs.append((ST.depth(cy),ST.place_at(build(CLAUDE,pose),cx,cy,flip=flip,pal=CPAL)))
+    s['actors']=ST.back_to_front(figs)
     if held:
         hx,hy=hand_xy(cx,cy,pose,flip)
         s['fx'].append(('co_vessel',hx,hy+5 if pose!='drink' else hy+3,level,foam,ice))

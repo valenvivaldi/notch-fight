@@ -166,6 +166,7 @@ and opens on the next one (`transitions/<to>__in`), two halves per theme rather 
 | `basterds` | Lt. Aldo Raine (olive jacket, slicked hair and moustache, the rope scar, the Bowie knife) in the French woods by the old stone tunnel, a German sergeant and a private on their knees: TELL ME WHERE YOUR BOYS ARE. / I RESPECTFULLY REFUSE, SIR. / DONNY!; out of the dark, the bat on the stone, TOC... TOC... TOC!; the close-up: the Bear Jew comes out of the black, THE BEAR JEW; one swing (a white cut, CRACK), the Basterds whoop; Aldo crouches by the private: THIS JUST MIGHT BE MY MASTERPIECE. | the Nazis | bear |
 | `basterds-cinema` | The premiere at Le Gamaar (its own set, no fight): Shosanna in the red dress at the end of the aisle while Stolz der Nation plays to a full house (the sniper in his bell tower, the grain, the projector's beam over the rows of caps); she slips out — CHAPTER FIVE: REVENGE OF THE GIANT FACE — the reel cuts and her face comes up on the screen: THIS IS THE FACE OF JEWISH VENGEANCE.; the nitrate catches behind it, the fire climbs the curtains; close-up: her face thrown onto the smoke, laughing; the screen is gone, the house in flames | the premiere's audience | cinema |
 | `hp` | Harry (round glasses, the scar, the Gryffindor scarf) in the graveyard at Little Hangleton: leaning headstones, the yew, the statue of Death with its scythe, mist on the ground. Voldemort rises out of the mist; EXPELLIARMUS! against AVADA KEDAVRA!, the red beam and the green lock, the bead of light sliding between them, the golden cage rising over both; the close-up inside the cage, PRIORI INCANTATEM, the shades of the dead coming out of the wand; Harry pushes the bead home, the link breaks and he runs for the cup — the Portkey — and he's gone | Voldemort | priori |
+| `looney-coyote` | Wile E. Coyote (Claude: brown-grey fur, the long snout, the big tail) next to his ACME crate in the desert: the package opens and the anvil on its rope drops on him (flat for a moment); the ACME rocket goes off without him and comes back for him (BOOM); the Road Runner zips past (BEEP BEEP, a dust trail), he chases it, overshoots the cliff, hangs, holds up HELP? and falls, a tiny puff of dust far below; close-up: mouth open, YET AGAIN | the Road Runner | acme |
 
 Playback (each time the panel shows): forced clips first, then every other clip in random order — no clip
 repeats until all of them have played, then a new round starts. Clips are grouped up to 2 per
@@ -208,7 +209,8 @@ nf quiet 22:00-08:00        # never show it in that window (add `weekdays` for M
 nf share hide|show          # while sharing the screen: hide the panel (default) or keep showing it
 nf delay 10s                # only show it once Claude has worked that long (quick answers stay quiet; `off`)
 nf click next               # a click skips to the next clip, a double click closes it (`close`: the default)
-nf menu on                  # a menu bar icon with all of the above (and "Choose clips…"); starts at login; `off`
+nf menu on                  # a menu bar icon with all of the above, the themes and the stats; starts at login; `off`
+nf stats                    # panel time, how often Claude waited for you, the most played (`reset`: back to zero)
 nf resident on|off          # keep the app up, hidden, between prompts (the default; `on` adds login) or not
 ```
 
@@ -222,14 +224,20 @@ keeps it answering exactly like `nf gate`.
 
 The rotation outlives the app: `~/.config/notch-fight/state.json` keeps the clips already played this
 round, so the next launch carries on with it instead of starting over, and no clip repeats until all have
-played. It also counts plays per clip and the time the panel was up each day.
+played. It also counts plays per clip, the time the panel was up each day and the times Claude waited for
+you: `nf stats` and the menu's Stats show them (`nf stats reset` zeroes them and keeps the round; the app
+reads the file before each change, so a reset holds).
 
 With a delay, the panel shows only once a session has been working that long: the resident app times it
 from the date of the session's marker (written on each prompt); not resident, the hook hands the prompt
 to a detached sleeper. `nf preview` plays in a second copy of the app; the resident one steps aside
 while it runs (the preview leaves its PID in `~/.config/notch-fight/.preview` and pokes it). The menu bar icon is a
 separate tiny app (`build/NotchFightMenu.app`, a LaunchAgent once on): a sparkle when the panel may
-show, a pause sign when it is hidden, and every item just runs `nf`.
+show, a pause sign when it is hidden, and every item just runs `nf`. Its **Themes** submenu has a check
+per theme (a dash when only some of its clips are on) to turn it on or off, the themes of one franchise
+(`dbz`, `dbz-buu`, ...) in a submenu of their own, everything split alphabetically into a few groups;
+plus all on, all off, back to the defaults and only the Argentine ones. **Preview** is grouped the same
+way, and **Stats** shows the numbers. `NotchFightMenu --print-menu` prints the menu as a tree (tests).
 
 Screen sharing is detected by process: Zoom runs `CptHost` while sharing and macOS runs
 `screencaptureui` while recording. A share from a browser tab (Meet, Teams on the web) looks like any
@@ -244,6 +252,9 @@ other tab from outside, so it isn't caught: list your own process names in `"sha
 ./clips.sh disable jjk-sukuna       # a clip (<theme>__<clip>) or a whole theme
 ./clips.sh enable sw__father
 ./clips.sh mode disabled           # what happens to NEW clips; the current selection is kept
+./clips.sh only arg arg-86         # just these themes (or clips)
+./clips.sh all on                  # everything, also what ships off; `all off`: nothing
+./clips.sh defaults                # back to what ships on
 ```
 
 Two modes, stored in `~/.config/notch-fight/config.json` (`install.sh` offers the checklist too):
@@ -317,7 +328,7 @@ for `sextant`, five for `octant`) into `build/mod/`.
 
 ## Panel shape
 
-The panel takes its size and position from the real notch of each Mac. Two looks can be tuned in
+The panel takes its size and position from the real notch of each Mac. Its looks can be tuned in
 `~/.config/notch-fight/config.json` (defaults shown; `./build.sh` only rewrites `"first"`):
 
 | Key | Default | Effect |
@@ -326,10 +337,20 @@ The panel takes its size and position from the real notch of each Mac. Two looks
 | `stretch` | `true` | Stretch the art to the notch width. `false` keeps square pixels, centred at 185pt (the black margins blend in). |
 | `scale` | `1` | Make the panel bigger than the notch (e.g. `1.5`), keeping the art's proportions and staying centred under it. `install.sh` sets `1.5` when Vorssaint is installed (its bar is wider than the notch), unless you already chose a scale. |
 | `widthTweak` | per model | Width correction (pt) when the panel overhangs by a hair. Built-in: `Mac14,2` → `-1`. |
+| `entrance` | `"spring"` | How it comes out and goes back: `"spring"` drops and settles with a wobble; `"bounce"` falls and bounces off the bottom; `"crt"` drops dark and switches on like an old TV (a bright line that opens up), and off the same way. |
+| `transitions` | `"mix"` | Between themes: a random style each time (`"mix"`), or always one of `"iris"`, `"dissolve"`, `"wipe"`, `"crt"`. A theme can have its own (the cinema's curtain). |
+| `glow` | off | `"soft"` or `"strong"`: a halo of the clip's light hugs the panel (its sides and below it, ~16 pt), in the colour of the frame on screen. |
 
 ```json
-{ "fillet": 8, "stretch": false }
+{ "fillet": 8, "stretch": false, "entrance": "crt", "glow": "soft" }
 ```
+
+Transitions are built per theme (`src/transitions.py`): the half that closes a theme and the half that
+opens the next meet at black, so any two go together. Each theme has `transitions/<theme>__out` / `__in`
+(the iris, also what the Claude Code mod plays) and `<theme>__out__<style>` for the other styles; a
+theme module can set `TRANSITION = '<style>'` to have only its own. The glow's colours come from the
+build too: `clips/<clip>/glow`, one `rrggbb` per frame: the hue from the scene's vivid pixels (not
+Claude's own orange, which is in every clip), the brightness from how lit the scene is.
 
 ## Layout
 
@@ -346,19 +367,21 @@ src/
 │   ├── loop.py        # time that loops: the clip's length, wrapped frames, periods that divide it
 │   ├── ambient.py     # rain, snow, ash, embers, fireflies, fog, torch, stars, flashes (they loop on their own)
 │   ├── director.py    # text: how long it stays up, wrapping, the biggest that fits; a close-up template
+│   ├── stage25.py     # 2.5D: a floor with depth (vanishing point or camera), sizes, shadows, order, paths
 │   └── render.py      # scene/actor model, backgrounds, render(), callout(), clip()
 ├── themes/            # one file per theme: sprites, its own effects, its clips, CLIPS = [...]
-│   ├── dbz.py  ygo.py  kny.py  jjk.py  fn.py  pkm.py  snk.py  nrt.py  hxh.py  fma.py  mk.py  jojo.py  apex.py  cs.py  hl.py  rm.py  inv.py  phm.py  arg.py  odyssey.py  dnd.py  eternauta.py  cai.py  thebear.py  lol.py  thisisfine.py  wednesday.py  memento.py  skyrim.py  haikyuu.py  fightclub.py  arcane.py  basterds.py  basterds_cinema.py  hp.py  meshi.py  terraria.py  mist.py  deadpool.py  spidey.py  coraline.py
+│   ├── dbz.py  ygo.py  kny.py  jjk.py  fn.py  pkm.py  snk.py  nrt.py  hxh.py  fma.py  mk.py  jojo.py  apex.py  cs.py  hl.py  rm.py  inv.py  phm.py  arg.py  odyssey.py  dnd.py  eternauta.py  cai.py  thebear.py  lol.py  thisisfine.py  wednesday.py  memento.py  skyrim.py  haikyuu.py  fightclub.py  arcane.py  basterds.py  basterds_cinema.py  hp.py  meshi.py  terraria.py  mist.py  deadpool.py  spidey.py  coraline.py  looney_coyote.py
 │   ├── sf.py  mario.py  mc.py  ds.py  sw.py  matrix.py  term.py  bb.py
 │   ├── naruto_edo.py  naruto_zabuza.py  dbz_buu.py  dbz_jiren.py  jjk_sukuna.py  ghibli_totoro.py  snk_colosal.py  arg_86.py  naruto_shikamaru.py  mist_kelsier.py  xmen_nightcrawler.py  xmen_gambit.py  arg_mate.py  arg_colapinto.py  naruto_lee.py  lol_yasuo.py  jjk_toji.py  jjk_maki.py  arg_alejo.py  arg_alejo_flotar.py  arg_cordoba.py   # sub-themes
 │   └── __init__.py    # auto-discovers every theme module
-├── transitions.py     # asterisk-iris transition between themes
+├── transitions.py     # transitions between themes: iris, dissolve, wipe, crt, and themes' own (curtain)
 ├── overlays.py        # drawn over any clip: the NEEDS YOU alert, the sessions badge (transparent frames)
 ├── build.py           # entry point used by build.sh
 └── legacy/single_clip.py   # the original standalone 10 s clip (--black for the notch version)
 app/main.swift, app/Info.plist   # the notch app
 app/Gate.swift                   # may the panel show (pause, quiet hours, sharing): app + menu, like `nf gate`
 app/State.swift                  # state.json: the rotation's round across launches, play counts, waits
+app/Glow.swift                   # the light a clip spills below the panel (config "glow")
 app/menu.swift                   # the menu bar icon (nf menu on)
 mod/                             # the Claude Code mod (band above the prompt)
 media/                           # rendered previews
@@ -389,7 +412,12 @@ See `CLAUDE.md` for the rules (a new clip is auto-set to play first).
 - **New clip in an existing theme:** add a `clip_<name>(f)` returning a scene to that theme's file
   and append `clip('<name>', <frames>, clip_<name>)` to its `CLIPS`. It must start and end on the
   theme's neutral pose.
-- **New theme:** create `src/themes/<id>.py` with `from engine import *`, `THEME = '<id>'`,
+- **New theme, the quick way:** `nf new-theme <id> [--sub-of <theme>] [--people] [--2.5d] [--no-fight]` writes
+  a skeleton that already imports, renders, loops and passes `nf check` (a palette, a background, one clip with
+  a line of text and a close-up, TODOs where your content goes), adds the theme to the table below and to the
+  source tree, and prints the next steps. `--people` builds Claude and the rival with `figure()`, `--2.5d` lays
+  the scene on a `Stage`, `--no-fight` leaves out the rival.
+- **New theme, by hand:** create `src/themes/<id>.py` with `from engine import *`, `THEME = '<id>'`,
   `register_bg(THEME, ...)`, its sprites/effects (`@fx('name')`) and `CLIPS`. Nothing else to
   touch: themes are auto-discovered and transitions to/from it are generated.
 - **Off by default:** for a clip most people may not want (a football club, a brand), ship it off so
@@ -413,6 +441,13 @@ See `CLAUDE.md` for the rules (a new clip is auto-set to play first).
   has the common ones (guard, jab, hook, hurt, cheer, point, walk, run, jump, kneel, crouch);
   `figure_point()` finds a hand or the head on screen (to hang a sword, a bat, a wand on it). The six
   themes with posed people (haikyuu, fightclub, arcane, basterds, arg-cordoba, hp) are built this way.
+- **Depth, 2.5D** (`engine/stage25.py`): a `Stage` is a floor seen at an angle, a point on it `(wx, z, h)`
+  (world x, depth 0 far .. 1 near, height). `proj()` puts it on screen, with a vanishing point
+  (`vp_x`, a court seen from the side), a camera with `parallax` (a pitch the camera follows) or
+  neither (a floor seen from the front); `place()` makes an actor sized (and faded) for its depth,
+  `shadow()` lays its shadow, `back_to_front()` orders a scene, `quad()` / `line()` draw on the floor,
+  `arc()` is a throw through the air and `ring()` a path round an ellipse. haikyuu, arg-86 and
+  arg-cordoba are drawn with it.
 - **Text, the easy way** (`engine/director.py`): `hold(txt)` is how many frames a line needs (0.5 s + 0.2 s
   a word, at least 1 s), `cue(f, start, txt)` whether it's up; `text_block(im, txt, box)` draws it as
   big as fits in a box, wrapped into even lines; the `caption` effect does the same; and

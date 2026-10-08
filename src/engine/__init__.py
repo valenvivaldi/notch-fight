@@ -13,3 +13,4 @@ from .people import *
 from . import loop
 from .ambient import *
 from .director import *
+from .stage25 import *

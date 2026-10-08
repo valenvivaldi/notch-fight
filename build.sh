@@ -32,14 +32,14 @@ fi
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$ROOT/app/Info.plist" "$APP/Contents/"
 for d in clips transitions overlays; do
-  rsync -a --delete --delete-excluded --include='*/' --include='frames.png' --include='count' --include='.default-off' \
+  rsync -a --delete --delete-excluded --include='*/' --include='frames.png' --include='count' --include='glow' --include='.default-off' \
     --exclude='*' "$OUT/$d/" "$APP/Contents/Resources/$d/"
 done
 # stale <binary> <sources...>: missing, or older than one of its sources (only then is the Swift compiled)
 stale() { local bin="$1"; shift; [[ -x "$bin" ]] || return 0; for s in "$@"; do [[ "$s" -nt "$bin" ]] && return 0; done; return 1; }
 # pin the deployment target: some toolchains default to a macOS newer than the running one (LaunchServices error -10825)
 swift() { swiftc -O -target "$(uname -m)-apple-macos13.0" "$@"; }
-SRC=("$ROOT/app/main.swift" "$ROOT/app/Gate.swift" "$ROOT/app/State.swift")
+SRC=("$ROOT/app/main.swift" "$ROOT/app/Gate.swift" "$ROOT/app/State.swift" "$ROOT/app/Glow.swift")
 stale "$APP/Contents/MacOS/NotchFight" "${SRC[@]}" && swift "${SRC[@]}" -o "$APP/Contents/MacOS/NotchFight"
 codesign -s - --force "$APP" >/dev/null 2>&1
 # a resident app that is up picks up the new build: it retracts and quits, and starts again (hidden, or

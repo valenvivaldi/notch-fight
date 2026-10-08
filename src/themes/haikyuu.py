@@ -15,10 +15,9 @@ SKIN = (246,206,170)
 FLOOR, COURT, LINE = (196,150,100), (224,150,82), (250,246,236)
 
 # ---- the projection: world x, depth z (0 = far sideline, 1 = near), height above the floor ---------------
-def sc(z): return lerp(0.62,1.0,z)
-def px(wx,z): return VP+(wx-VP)*sc(z)
-def feet(z): return lerp(33,62,z)
-def proj(wx,z,h=0): return px(wx,z), feet(z)-h*sc(z)
+# (engine/stage25.py: the court converges on the vanishing x; the far half drawn smaller)
+ST = Stage(far_y=33, near_y=62, vp_x=VP, far_scale=0.62)
+sc, feet, proj = ST.scale, ST.feet, ST.proj
 
 # ---- the players: built from a pose (arms, legs), so they all move the same way --------------------------
 GW, GH, C = 20, 28, 10                                              # grid size, centre column
@@ -59,11 +58,6 @@ K_SERVER   = _kit((70,50,36),WHITE,PURPLE,PURPLE,PURPLE,skin=(226,184,150))
 
 
 # ---- the gym ------------------------------------------------------------------------------------------
-def _quad(d,wx0,wx1,z0,z1,c):
-    d.polygon([proj(wx0,z0),proj(wx1,z0),proj(wx1,z1),proj(wx0,z1)],fill=c)
-def _wline(d,a,b,c):
-    d.line([proj(*a),proj(*b)],fill=c)
-
 def _gym(d):
     d.rectangle([0,0,W,H],fill=(70,62,58))                          # the stands, packed
     rr=random.Random(10)
@@ -77,10 +71,10 @@ def _gym(d):
     d.rectangle([150,22,178,30],fill=PURPLE); text(d,"SRZ",158,24,WHITE,shadow=None)
     d.rectangle([0,31,W,H],fill=FLOOR)
     for z in (0.15,0.35,0.6,0.9): d.line([0,feet(z),W,feet(z)],fill=(184,140,92))
-    _quad(d,8,176,0.06,0.96,COURT)                                   # the court and its lines
+    ST.quad(d,8,176,0.06,0.96,COURT)                                 # the court and its lines
     for a,b in (((8,0.06),(176,0.06)),((8,0.96),(176,0.96)),((8,0.06),(8,0.96)),((176,0.06),(176,0.96)),
                 ((NX,0.06),(NX,0.96)),((NX-30,0.06),(NX-30,0.96)),((NX+30,0.06),(NX+30,0.96))):
-        _wline(d,a,b,LINE)
+        ST.line(d,a,b,LINE)
 register_bg(THEME, lambda v: (v+120,v+90,v+50), decor=_gym)
 
 NET_TOP, NET_LOW = 26, 13
@@ -102,14 +96,13 @@ def _fx_net(d,im,e,f):
 
 @fx('hq_shadow')
 def _fx_shadow(d,im,e,f):
-    _,wx,z,w=e; x,y=proj(wx,z); w*=sc(z)
-    L=Image.new('L',(W,H),0); ImageDraw.Draw(L).ellipse([x-w,y-1,x+w,y+1],fill=80); im.paste((90,60,30),(0,0),L)
+    _,wx,z,w=e; ST.shadow(im,wx,z,w,(90,60,30),80)
 
 @fx('hq_figs')
 def _fx_figs(d,im,e,f):
     """Players drawn under the net (Shiratorizawa, on the far side of it from us)."""
     for spr,wx,z,h,flip,pal in e[1]:
-        x,y=proj(wx,z,h); draw(im,shrink(spr) if z<0.5 else spr,x,y,flip,pal=pal)
+        x,y=proj(wx,z,h); draw(im,ST.sized(spr,z),x,y,flip,pal=pal)
 
 def draw_ball(d,x,y,r=2):
     x,y=int(round(x)),int(round(y))
@@ -195,11 +188,7 @@ def closeup_top(t,f):
     if t<0.05: zoom_lines(d,(255,255,255))
     return im
 
-# ---- the rally ----------------------------------------------------------------------------------------
-def arc(p0,p1,peak,t):
-    """(wx, z, h) along a throw from p0 to p1 with an extra peak height."""
-    t=max(0,min(1,t)); return (lerp(p0[0],p1[0],t),lerp(p0[1],p1[1],t),lerp(p0[2],p1[2],t)+4*peak*t*(1-t))
-
+# ---- the rally (arc(): engine/stage25.py, a throw through (wx, z, h)) ----------------------------------
 def ready(f): return 'bent' if (f//6)%2==0 else 'stand'
 def run(f): return 'run1' if (f//3)%2 else 'run2'
 
@@ -271,8 +260,7 @@ def clip_quick(f):
     for k,p in sorted(P.items(),key=lambda kv:kv[1]['z']):
         spec,pal=CAST[k]; spr=build(spec,p['arms'],p['legs'],p['shut'])
         if p['wx']>NX: far.append((spr,p['wx'],p['z'],p['h'],p['flip'],pal))
-        else:
-            x,y=proj(p['wx'],p['z'],p['h']); acts.append(actor(shrink(spr) if p['z']<0.5 else spr,x,y,flip=p['flip'],pal=pal))
+        else: acts.append(ST.place(spr,p['wx'],p['z'],p['h'],flip=p['flip'],pal=pal))
     s['under'].append(('hq_figs',far)); s['under'].append(('hq_net',))
     if score: s['under'].insert(0,('hq_score',score[0],19,score[1]))
     s['actors']=acts

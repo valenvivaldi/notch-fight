@@ -217,23 +217,13 @@ GOAL=356                                     # world x of England's goal
 AHEAD=((150,'slide',0.35),(210,'lunge',0.8),(262,'lunge',0.45))   # (world x, kind, depth) up the pitch
 WEAVE=((40,1.0),(80,0.7),(128,0.6),(150,0.88),(188,0.7),(210,0.32),(240,0.55),(262,0.82),(330,0.6),(344,0.6))
 
-def feet_of(z): return int(lerp(46,GROUND,z))
-
-from engine import people
-def shrink(spr,k=0.75):
-    """A 3/4-size copy of a sprite grid (the engine's, at 3/4)."""
-    return people.shrink(spr,k)
-
-def place(spr,wx,z,cam,flip,pal,alpha=1.0,lift=0):
-    """An actor at world x / depth z: parallax, size, fade and feet line from the depth."""
-    sx=wx-cam*lerp(0.9,1.0,z); far=z<0.5
-    return actor(shrink(spr) if far else spr,sx,feet_of(z)-lift,flip=flip,pal=pal,alpha=alpha*(0.82 if far else 1.0)), sx
+# (engine/stage25.py: feet from 46 to GROUND, the far side moving at 0.9 of the camera, drawn 3/4 and faded)
+ST=Stage(far_y=46,near_y=GROUND,parallax=0.1,far_k=0.75,far_alpha=0.82,round_feet=True)
 
 @fx('a86_shadow')
 def _fx_shadow(d,im,e,f):
     """A soft shadow on the grass under a figure or the ball."""
-    _,x,y,w=e; L=Image.new('L',(W,H),0); ImageDraw.Draw(L).ellipse([x-w,y-1,x+w,y+1],fill=90)
-    im.paste((40,60,30),(0,0),L)
+    _,wx,z,w,cam=e; ST.shadow(im,wx,z,w,(40,60,30),90,cam=cam,scaled=False)
 
 @fx('a86_boards')
 def _fx_boards(d,im,e,f):
@@ -274,7 +264,7 @@ def clip_siglo(f):
             z=lerp(z0+(0.2 if i==0 else -0.2),z0,min(1,(f-14)/16)) if f>=14 else z0
             figs.append((PLAYER['attack' if 34<=f<40 else 'idle'],lerp(x0+30,x0,min(1,max(0,(f-14)/16))),z,True,KIT_ENG,1))
         elif i==0 and f<200: figs.append((DIVE,x0,z0,True,KIT_ENG,1))
-    if 30<=f<40: dflip=(f//2)%2==1; s['fx'].append(('a86_swirl',40-cam,feet_of(dz)-3,f-30))
+    if 30<=f<40: dflip=(f//2)%2==1; s['fx'].append(('a86_swirl',40-cam,ST.feet(dz)-3,f-30))
     # the ones up the pitch: each steps across into his lane, and is left on the grass
     ta=0
     for x0,kind,z0 in AHEAD:
@@ -284,7 +274,7 @@ def clip_siglo(f):
         elif wx<x0+2:
             zz=lerp(z0,dz,0.5); ta+=1
             figs.append((DIVE if kind=='slide' else PLAYER['attack'],x0-4,zz,True,KIT_ENG,1))
-            if kind=='slide': s['fx'].append(('a86_turf',x0-4-cam,feet_of(zz)-2,int(wx-reach)))
+            if kind=='slide': s['fx'].append(('a86_turf',x0-4-cam,ST.feet(zz)-2,int(wx-reach)))
         else: figs.append((DIVE,x0+2,lerp(z0,dz,0.5),True,KIT_ENG,1)); ta+=1
     # the chaser, near side, who tackles as he shoots
     if 40<=f<262: figs.append((PLAYER['idle'] if f<258 else DIVE,lerp(66,wx-18,min(1,(f-40)/200)),0.92,False,KIT_ENG,1))
@@ -294,7 +284,7 @@ def clip_siglo(f):
     figs.append((TALL['idle'] if f<252 else DIVE,GOAL-12 if f<240 else lerp(GOAL-12,GOAL-22,min(1,(f-240)/10)),kz,True,KIT_KEEP,1))
     if 250<=f<262: dpose='guard' if (f//3)%2 else 'dash'
     if 258<=f<266: ball=(lerp(wx+9,GOAL+2,(f-258)/8),lerp(dz,0.6,(f-258)/8),0)
-    if 266<=f<280: ball=(GOAL+2,0.6,0); s['fx'].append(('arg_net',GOAL+4-cam,feet_of(0.6)-4,f-266))
+    if 266<=f<280: ball=(GOAL+2,0.6,0); s['fx'].append(('arg_net',GOAL+4-cam,ST.feet(0.6)-4,f-266))
     if 262<=f<300: dpose,dflip='armsup',(f//12)%2==1
     if 40<=f<262 and ta: s['fx'].append(('a86_caption',' '.join(['TA']*(ta+1))))
     if 270<=f<300: s['fx'].append(('a86_big',"GOLAZO",20,GOLD))                          # 1.5 s
@@ -307,15 +297,14 @@ def clip_siglo(f):
     if neutral: wx,dz,dflip,dpose=40,1.0,False,guard_pose(f); figs=[]; ball=(49,1.0,0)
     figs.append((DIEGO[dpose],wx,dz,dflip,DPAL,1))
     acts=[]
-    for spr,x,z,flip,pal,a in sorted(figs,key=lambda t:t[2]):                # back to front
-        act,sx=place(spr,x,z,cam,flip,pal,a)
-        if -14<sx<W+14:
-            if not neutral: s['under'].append(('a86_shadow',sx,feet_of(z),5 if z<0.5 else 7))   # the neutral pose matches mano
-            acts.append(act)
-    if 40<=f<262: s['under'].append(('a86_trail',wx-cam*lerp(0.9,1.0,dz),feet_of(dz)))
+    for spr,x,z,flip,pal,a in ST.back_to_front([(t[2],t) for t in figs]):          # back to front
+        if -14<ST.x(x,z,cam)<W+14:
+            if not neutral: s['under'].append(('a86_shadow',x,z,5 if z<0.5 else 7,cam))   # the neutral pose matches mano
+            acts.append(ST.place(spr,x,z,cam=cam,flip=flip,pal=pal,alpha=a))
+    if 40<=f<262: s['under'].append(('a86_trail',ST.x(wx,dz,cam),ST.feet(dz)))
     if ball:
-        bx,bz,bh=ball; bsx=bx-cam*lerp(0.9,1.0,bz); by=feet_of(bz)
-        if not neutral: s['under'].append(('a86_shadow',bsx,by,2))
+        bx,bz,bh=ball; bsx=ST.x(bx,bz,cam); by=ST.feet(bz)
+        if not neutral: s['under'].append(('a86_shadow',bx,bz,2,cam))
         s['fx'].append(('arg_ball',bsx,by-2-bh))
     s['actors']=acts
     return s
