@@ -57,5 +57,11 @@
 - To look at frames while making a clip: `python3 scripts/sheet.py <theme> [clip] [frames]` (no build).
 - Build people with `figure(spec, pose)` (`engine/people.py`) and its `POSES`, adding a theme's own poses
   and small painters for what's particular to a character, rather than a new pose-builder per theme.
+- Start a new theme with `nf new-theme <id> [--sub-of <theme>] [--people] [--2.5d] [--no-fight]`: it writes a
+  skeleton that already loops, passes `nf check` and uses the toolkit below, adds its README row, and shows
+  the sheet; then fill in its TODOs.
+- For depth (2.5D: a court, a pitch, a dance floor), use a `Stage` (`engine/stage25.py`): `proj`, `place`
+  (far figures smaller / faded), `shadow`, `back_to_front`, `quad` / `line` on the floor, `arc` and `ring`
+  for paths, rather than a projection of the theme's own.
 - Before calling a theme done, run `nf check <theme>`: it must report nothing new. Time text with
   `engine/director.py` (`hold`, `cue`) and lay it out with `text_block` / `closeup` rather than by hand.

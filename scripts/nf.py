@@ -18,6 +18,10 @@
                                    default; "on" also starts it at login), or quit it each time (off)
     nf check [<theme>...]          check themes against the rules: loops, the font, text long enough
                                    to read and inside the panel (all of them when none is named)
+    nf new-theme <id> [--sub-of <theme>] [--people] [--2.5d] [--no-fight]
+                                   a skeleton for a new theme that starts out right (src/themes/<id>.py, its
+                                   README rows, then nf check and a contact sheet); --people: figure() and
+                                   POSES, --2.5d: a Stage, --no-fight: a calm scene
 
 Whether the panel may show right now is decided by `gate()`, which the Claude Code hook
 (scripts/notch-hook.sh) asks: `nf gate` exits 0 when it may show, 1 when it may not, and prints why.
@@ -467,6 +471,8 @@ def main(argv):
     if cmd == 'clips': return clipsmod.main(args)
     if cmd == 'check':
         import check; return check.main(args)
+    if cmd == 'new-theme':
+        import new_theme; return new_theme.main(args)
     if cmd not in COMMANDS: print(f"nf: unknown command '{cmd}' (nf help)", file=sys.stderr); return 2
     try: COMMANDS[cmd](args)
     except (NfError, clipsmod.ClipsError) as e: print(f'nf: {e}', file=sys.stderr); return 1

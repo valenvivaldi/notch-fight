@@ -168,6 +168,7 @@ and opens on the next one (`transitions/<to>__in`), two halves per theme rather 
 | `hp` | Harry (round glasses, the scar, the Gryffindor scarf) in the graveyard at Little Hangleton: leaning headstones, the yew, the statue of Death with its scythe, mist on the ground. Voldemort rises out of the mist; EXPELLIARMUS! against AVADA KEDAVRA!, the red beam and the green lock, the bead of light sliding between them, the golden cage rising over both; the close-up inside the cage, PRIORI INCANTATEM, the shades of the dead coming out of the wand; Harry pushes the bead home, the link breaks and he runs for the cup — the Portkey — and he's gone | Voldemort | priori |
 | `tresacordes` | Claude in the flat in Rosario with Jaique (the black block of hair, the skull t-shirt), Eduard (the long hair over one eye, his book of poems) and Adriel (the orange curls, round glasses, red t-shirt): Claude reads Edu's poem and likes it (close-up: POR FIN ALGUIEN LO LEYO); makes the beat for Adriel's rap, TODO CARO, TODO CARO, uploads it, 700 views and everyone laughs (close-up: YO HAGO ARTE, NO COMEDIA!), Berna: BUEN LABURAR NUNCA, NO? MEDIOCRE; Jaique asks the meaning of life and Dios (bald, yellow, the horseshoe moustache, a cigarette) comes down on a cloud: NI IDEA. PREGUNTENLE A CLAUDE | Adriel's temper, Berna | poema, fristail, sentido |
 | `dross` | Claude in Dross's studio (dark, lit red, the candle, the monitor; Dross in the khaki hat with the leopard crown and the aviators): ESTOS SON LOS 7 PROMPTS MÁS PERTURBADORES, a countdown of 7 requests to Claude (HACELO TODO, SIN BUGS, PARA AYER: he types till the keys spark; HACELO COMO ANTES, PERO DISTINTO; NO TOQUES NADA, PERO ARREGLALO: a red X; ARREGLALO, YA SABÉS CUÁL: a huge ?; ES URGENTE, EL CLIENTE YA SE ENOJÓ: the phone rings; SUBILO A PROD, ES VIERNES: FRI 18:59; BORRÁ TODO LO QUE NO SIRVA: he hits enter, KABOOM), then the close-up of Dross: ¡COÑOOO!!!; TE FALTÓ EL NÚMERO 0: GRACIAS, CLAUDE, and Dross falls off his chair | the prompts | top7 |
+| `looney-coyote` | Wile E. Coyote (Claude: brown-grey fur, the long snout, the big tail) next to his ACME crate in the desert: the package opens and the anvil on its rope drops on him (flat for a moment); the ACME rocket goes off without him and comes back for him (BOOM); the Road Runner zips past (BEEP BEEP, a dust trail), he chases it, overshoots the cliff, hangs, holds up HELP? and falls, a tiny puff of dust far below; close-up: mouth open, YET AGAIN | the Road Runner | acme |
 
 Playback (each time the panel shows): forced clips first, then every other clip in random order — no clip
 repeats until all of them have played, then a new round starts. Clips are grouped up to 2 per
@@ -369,9 +370,10 @@ src/
 │   ├── loop.py        # time that loops: the clip's length, wrapped frames, periods that divide it
 │   ├── ambient.py     # rain, snow, ash, embers, fireflies, fog, torch, stars, flashes (they loop on their own)
 │   ├── director.py    # text: how long it stays up, wrapping, the biggest that fits; a close-up template
+│   ├── stage25.py     # 2.5D: a floor with depth (vanishing point or camera), sizes, shadows, order, paths
 │   └── render.py      # scene/actor model, backgrounds, render(), callout(), clip()
 ├── themes/            # one file per theme: sprites, its own effects, its clips, CLIPS = [...]
-│   ├── dbz.py  ygo.py  kny.py  jjk.py  fn.py  pkm.py  snk.py  nrt.py  hxh.py  fma.py  mk.py  jojo.py  apex.py  cs.py  hl.py  rm.py  inv.py  phm.py  arg.py  odyssey.py  dnd.py  eternauta.py  cai.py  thebear.py  lol.py  thisisfine.py  wednesday.py  memento.py  skyrim.py  haikyuu.py  fightclub.py  arcane.py  basterds.py  basterds_cinema.py  hp.py  meshi.py  terraria.py  mist.py  deadpool.py  spidey.py  coraline.py  tresacordes.py  dross.py
+│   ├── dbz.py  ygo.py  kny.py  jjk.py  fn.py  pkm.py  snk.py  nrt.py  hxh.py  fma.py  mk.py  jojo.py  apex.py  cs.py  hl.py  rm.py  inv.py  phm.py  arg.py  odyssey.py  dnd.py  eternauta.py  cai.py  thebear.py  lol.py  thisisfine.py  wednesday.py  memento.py  skyrim.py  haikyuu.py  fightclub.py  arcane.py  basterds.py  basterds_cinema.py  hp.py  meshi.py  terraria.py  mist.py  deadpool.py  spidey.py  coraline.py  tresacordes.py  dross.py  looney_coyote.py
 │   ├── sf.py  mario.py  mc.py  ds.py  sw.py  matrix.py  term.py  bb.py
 │   ├── naruto_edo.py  naruto_zabuza.py  dbz_buu.py  dbz_jiren.py  jjk_sukuna.py  ghibli_totoro.py  snk_colosal.py  arg_86.py  naruto_shikamaru.py  mist_kelsier.py  xmen_nightcrawler.py  xmen_gambit.py  arg_mate.py  arg_colapinto.py  naruto_lee.py  lol_yasuo.py  jjk_toji.py  jjk_maki.py  arg_alejo.py  arg_alejo_flotar.py  arg_cordoba.py   # sub-themes
 │   └── __init__.py    # auto-discovers every theme module
@@ -413,7 +415,12 @@ See `CLAUDE.md` for the rules (a new clip is auto-set to play first).
 - **New clip in an existing theme:** add a `clip_<name>(f)` returning a scene to that theme's file
   and append `clip('<name>', <frames>, clip_<name>)` to its `CLIPS`. It must start and end on the
   theme's neutral pose.
-- **New theme:** create `src/themes/<id>.py` with `from engine import *`, `THEME = '<id>'`,
+- **New theme, the quick way:** `nf new-theme <id> [--sub-of <theme>] [--people] [--2.5d] [--no-fight]` writes
+  a skeleton that already imports, renders, loops and passes `nf check` (a palette, a background, one clip with
+  a line of text and a close-up, TODOs where your content goes), adds the theme to the table below and to the
+  source tree, and prints the next steps. `--people` builds Claude and the rival with `figure()`, `--2.5d` lays
+  the scene on a `Stage`, `--no-fight` leaves out the rival.
+- **New theme, by hand:** create `src/themes/<id>.py` with `from engine import *`, `THEME = '<id>'`,
   `register_bg(THEME, ...)`, its sprites/effects (`@fx('name')`) and `CLIPS`. Nothing else to
   touch: themes are auto-discovered and transitions to/from it are generated.
 - **Off by default:** for a clip most people may not want (a football club, a brand), ship it off so
@@ -437,6 +444,13 @@ See `CLAUDE.md` for the rules (a new clip is auto-set to play first).
   has the common ones (guard, jab, hook, hurt, cheer, point, walk, run, jump, kneel, crouch);
   `figure_point()` finds a hand or the head on screen (to hang a sword, a bat, a wand on it). The six
   themes with posed people (haikyuu, fightclub, arcane, basterds, arg-cordoba, hp) are built this way.
+- **Depth, 2.5D** (`engine/stage25.py`): a `Stage` is a floor seen at an angle, a point on it `(wx, z, h)`
+  (world x, depth 0 far .. 1 near, height). `proj()` puts it on screen, with a vanishing point
+  (`vp_x`, a court seen from the side), a camera with `parallax` (a pitch the camera follows) or
+  neither (a floor seen from the front); `place()` makes an actor sized (and faded) for its depth,
+  `shadow()` lays its shadow, `back_to_front()` orders a scene, `quad()` / `line()` draw on the floor,
+  `arc()` is a throw through the air and `ring()` a path round an ellipse. haikyuu, arg-86 and
+  arg-cordoba are drawn with it.
 - **Text, the easy way** (`engine/director.py`): `hold(txt)` is how many frames a line needs (0.5 s + 0.2 s
   a word, at least 1 s), `cue(f, start, txt)` whether it's up; `text_block(im, txt, box)` draws it as
   big as fits in a box, wrapped into even lines; the `caption` effect does the same; and
