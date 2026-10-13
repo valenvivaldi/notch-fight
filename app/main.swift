@@ -94,11 +94,16 @@ final class App: NSObject, NSApplicationDelegate {
         root = v.layer!
         root.backgroundColor = NSColor.black.cgColor
         root.mask = shape
+        root.addSublayer(content)
         for layer in [art, alertLayer, badgeLayer] {
             layer.magnificationFilter = .nearest
             layer.actions = ["contents": NSNull()]
-            root.addSublayer(layer)
+            content.addSublayer(layer)
         }
+        crtMask.backgroundColor = NSColor.white.cgColor
+        crtLine.backgroundColor = NSColor.white.cgColor; crtLine.isHidden = true
+        for l in [content, crtMask, crtLine] { l.actions = ["bounds": NSNull(), "position": NSNull(), "opacity": NSNull(), "hidden": NSNull()] }
+        root.addSublayer(crtLine)
         v.autoresizingMask = [.width, .height]
         win.contentView = v
 
@@ -212,7 +217,9 @@ final class App: NSObject, NSApplicationDelegate {
         if allowed.isEmpty && queue.isEmpty {
             NSLog("NotchFight: no clips active (see ./clips.sh); not showing the panel"); return
         }
-        art.frame = CGRect(x: fillet, y: 0, width: bodyW, height: bodyH)
+        content.mask = nil; crtLine.isHidden = true                  // whatever an interrupted CRT effect left
+        content.frame = CGRect(x: fillet, y: 0, width: bodyW, height: bodyH)
+        art.frame = content.bounds
         // Art is authored at a fixed W×H canvas (185×64, MacBookPro18,3's notch width) with effects
         // drawn edge-to-edge. `notchW` varies per Mac (e.g. 209pt on a MacBook Air M2), so `.resizeAspect`
         // would center the unscaled art and leave dead black margins instead of reaching the real notch
@@ -228,6 +235,8 @@ final class App: NSObject, NSApplicationDelegate {
         alertFrames = Self.loadFrames(res.appendingPathComponent("wait"), alpha: true)
         countFrames = Self.loadFrames(res.appendingPathComponent("count"), alpha: true)
         if !preview { noteSessions(liveSessions()) }
+        glowColors = [:]
+        glowStrength = Glow.strength(config["glow"])
         win.setFrame(rect(height: 0), display: false)
         phase = .shown; trace("shown")
         shownSince = Date()
@@ -236,7 +245,74 @@ final class App: NSObject, NSApplicationDelegate {
         win.orderFrontRegardless()
         playTimer?.invalidate()
         playTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 20.0, repeats: true) { [weak self] _ in self?.tick() }
-        animate(to: bodyH, duration: 0.55, spring: true)
+        dropIn { [weak self] in self?.glowIn() }
+    }
+
+    // Config "entrance": how the panel comes out and goes back. "spring" (default): it drops and settles
+    // with a little wobble; "bounce": it falls and bounces off the bottom; "crt": it drops dark and the
+    // picture switches on like an old TV (a bright line that opens up), and off the same way.
+    var entrance: String { (config["entrance"] as? String) ?? "spring" }
+    let content = CALayer()                             // the clip and its overlays (masked by the CRT effect)
+    let crtMask = CALayer(), crtLine = CALayer()
+
+    func dropIn(done: @escaping () -> Void) {
+        switch entrance {
+        case "bounce": animate(to: bodyH, duration: 0.75, curve: .bounce, done: done)
+        case "crt":
+            setCRT(open: 0, line: 0)
+            animate(to: bodyH, duration: 0.18, curve: .smooth) { [weak self] in
+                guard let self else { return }
+                self.run(0.38, { p in                               // the line spreads, then the picture opens
+                    if p < 0.35 { self.setCRT(open: 0, line: p / 0.35) } else { self.setCRT(open: (p - 0.35) / 0.65, line: 1) }
+                }) { self.content.mask = nil; self.crtLine.isHidden = true; done() }
+            }
+        default: animate(to: bodyH, duration: 0.55, curve: .spring, done: done)
+        }
+    }
+
+    func goUp(done: @escaping () -> Void) {
+        glowOut()
+        if entrance == "crt" {
+            run(0.3, { [weak self] p in                             // the picture closes to a line, the line to a dot
+                guard let self else { return }
+                if p < 0.6 { self.setCRT(open: 1 - p / 0.6, line: 1) } else { self.setCRT(open: 0, line: 1 - (p - 0.6) / 0.4) }
+            }) { [weak self] in
+                self?.crtLine.isHidden = true
+                self?.animate(to: 0, duration: 0.18, curve: .smooth, done: done)
+            }
+        } else { animate(to: 0, duration: 0.3, curve: .smooth, done: done) }
+    }
+
+    /// open: 0 (a line) .. 1 (the whole picture); line: how much of the width the bright line covers.
+    func setCRT(open: Double, line: Double) {
+        let b = content.bounds, mid = b.height / 2
+        let h = max(2, b.height * CGFloat(open * open)), w = b.width * CGFloat(line)
+        content.mask = crtMask
+        crtMask.frame = open > 0 ? CGRect(x: 0, y: mid - h / 2, width: b.width, height: h) : .zero
+        crtLine.isHidden = line <= 0
+        crtLine.frame = CGRect(x: content.frame.minX + (b.width - w) / 2, y: mid - 1, width: w, height: 2)
+        crtLine.opacity = Float(1 - open)
+    }
+
+    // The glow around the panel (Glow.swift), when the config asks for it.
+    var glow: Glow?
+    var glowStrength: Double?
+    var glowColors: [String: [SIMD3<Double>]] = [:]     // clip -> one colour per frame
+    var currentName: String?
+    func glowIn() {
+        guard phase == .shown, let strength = glowStrength else { return }
+        let g = glow ?? Glow(); glow = g; g.strength = strength
+        let f = screen.frame                                        // the panel, from the screen's top edge down
+        g.place(below: win, around: NSRect(x: notchMidX - bodyW / 2, y: f.maxY - notchH - bodyH, width: bodyW, height: notchH + bodyH),
+                corner: min(corner, bodyH / 2))
+        if let n = currentName, let c = glowColors[n], idx > 0, idx - 1 < c.count { g.color = c[idx - 1] }
+        g.step(toward: nil)
+        g.win.orderFrontRegardless(); g.win.order(.below, relativeTo: win.windowNumber)
+        g.fade(to: 1, duration: 0.4)
+    }
+    func glowOut() {
+        guard let g = glow, g.win.isVisible else { return }
+        g.fade(to: 0, duration: 0.15) { g.win.orderOut(nil) }
     }
 
     // The panel retracts into the notch. Resident: it then lets go of every frame and waits, hidden;
@@ -246,14 +322,14 @@ final class App: NSObject, NSApplicationDelegate {
         NSLog("NotchFight: hiding (\(why))")
         phase = .hiding
         saveState()
-        animate(to: 0, duration: 0.3, spring: false) { [weak self] in
+        goUp { [weak self] in
             guard let self else { return }
             if !self.resident { NSApp.terminate(nil); return }
             self.playTimer?.invalidate(); self.playTimer = nil
             self.win.orderOut(nil)
             self.art.contents = nil; self.alertLayer.contents = nil; self.badgeLayer.contents = nil
             self.current = []; self.queue = []; self.cache = [:]; self.cacheOrder = []
-            self.alertFrames = []; self.countFrames = []
+            self.alertFrames = []; self.countFrames = []; self.glowColors = [:]
             self.phase = .hidden; self.trace("hidden")
             self.evaluate()                                          // a prompt may have come in meanwhile
         }
@@ -295,7 +371,10 @@ final class App: NSObject, NSApplicationDelegate {
         guard queue.isEmpty, !preparing, let next = pickNext() else { return }
         let t = themeOf(next)
         var keys: [(String, URL?)] = [("c:" + next, clipDirs[next])]
-        if !theme.isEmpty && t != theme { keys += [("t:\(theme)__out", transDirs["\(theme)__out"]), ("t:\(t)__in", transDirs["\(t)__in"])] }
+        if !theme.isEmpty && t != theme {
+            nextStyle = pickStyle()
+            keys += transKeys(from: theme, to: t, style: nextStyle!).map { ("t:" + $0, transDirs[$0]) }
+        }
         let todo = keys.filter { cache[$0.0] == nil }
         preparing = true
         DispatchQueue.global(qos: .userInitiated).async {
@@ -470,11 +549,34 @@ final class App: NSObject, NSApplicationDelegate {
     func enqueue(_ name: String) {
         guard let clipFrames = frames("c:" + name, clipDirs[name]) else { return }
         let t = themeOf(name)
-        if !theme.isEmpty && t != theme {                             // the iris closes on this theme, opens on the next
-            for tk in ["\(theme)__out", "\(t)__in"] { if let tr = frames("t:" + tk, transDirs[tk]) { queue.append((nil, tr)) } }
+        if !theme.isEmpty && t != theme {                             // this theme closes, the next one opens
+            for tk in transKeys(from: theme, to: t, style: nextStyle ?? pickStyle()) {
+                if let tr = frames("t:" + tk, transDirs[tk]) { queue.append((nil, tr)) }
+            }
         }
+        nextStyle = nil
         picked(name)
         queue.append((name, clipFrames))
+    }
+
+    // Transitions (src/transitions.py): each theme has halves in several styles, <theme>__out / __in for its
+    // first (the iris, or the theme's own) and <theme>__out__<style> for the rest. Config "transitions":
+    // "mix" (default) picks one at random on each change; a style's name always uses that one. A theme
+    // without that style plays its first.
+    var nextStyle: String?                              // the style prepareNext loaded for the coming change
+    func pickStyle() -> String {
+        let want = (config["transitions"] as? String) ?? "mix"
+        if want != "mix" { return want }
+        return ([""] + otherStyles()).randomElement()!                 // "": the first style
+    }
+    func otherStyles() -> [String] {
+        Set(transDirs.keys.compactMap { k in k.range(of: "__out__").map { String(k[$0.upperBound...]) } }).sorted()
+    }
+    func transKeys(from: String, to: String, style: String) -> [String] {
+        ["\(from)__out", "\(to)__in"].map { base in
+            let k = style.isEmpty ? base : "\(base)__\(style)"
+            return transDirs[k] != nil ? k : base
+        }
     }
 
     // The rotation's bookkeeping once a clip is chosen (it is queued, not yet playing).
@@ -507,28 +609,57 @@ final class App: NSObject, NSApplicationDelegate {
             if preparing && queue.isEmpty { return }                  // the next one is nearly ready: hold this frame
             if queue.isEmpty, let next = pickNext() { enqueue(next) }
             guard !queue.isEmpty else { close(); return }             // a preview's clips are done
-            let item = queue.removeFirst(); current = item.frames; idx = 0
-            if let name = item.name { started(name) }
+            let item = queue.removeFirst(); current = item.frames; idx = 0; currentName = item.name
+            if let name = item.name {
+                started(name)
+                if glowStrength != nil, glowColors[name] == nil, let dir = clipDirs[name] { glowColors[name] = Glow.load(dir) }
+            }
             prepareNext()
         }
         art.contents = current[idx]
         idx += 1
         alertLayer.contents = waitingNow && !alertFrames.isEmpty ? alertFrames[alertIdx % alertFrames.count] : nil
         alertIdx += 1
+        if let g = glow, g.win.isVisible {                          // transitions: no colours, it keeps the last
+            let c = currentName.flatMap { glowColors[$0] }
+            g.step(toward: c.flatMap { idx - 1 < $0.count ? $0[idx - 1] : nil })
+        }
     }
 
-    // Manual 60 fps frame animation: window frames don't take spring timing reliably.
-    func animate(to target: CGFloat, duration: Double, spring: Bool, done: (() -> Void)? = nil) {
+    // Manual 60 fps animation (window frames don't take spring timing reliably): step(p), p from 0 to 1.
+    func run(_ duration: Double, _ step: @escaping (Double) -> Void, done: (() -> Void)? = nil) {
         animTimer?.invalidate()
-        let start = win.frame.height - overlap, t0 = CACurrentMediaTime()
-        animTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] t in
-            guard let self else { return }
+        let t0 = CACurrentMediaTime()
+        animTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { t in
             let p = min(1, (CACurrentMediaTime() - t0) / duration)
-            let e = spring ? 1 - exp(-6 * p) * cos(9 * p) : p * p * (3 - 2 * p)
-            self.win.setFrame(self.rect(height: max(0, start + (target - start) * CGFloat(p >= 1 ? 1 : e))), display: true)
-            self.updateMask()
+            CATransaction.begin(); CATransaction.setDisableActions(true); step(p); CATransaction.commit()
             if p >= 1 { t.invalidate(); done?() }
         }
+    }
+
+    enum Curve { case spring, smooth, bounce }
+    static func ease(_ c: Curve, _ p: Double) -> Double {
+        if p >= 1 { return 1 }
+        switch c {
+        case .spring: return 1 - exp(-6 * p) * cos(9 * p)
+        case .smooth: return p * p * (3 - 2 * p)
+        case .bounce:                                               // falls, then smaller and smaller bounces
+            let n = 7.5625, d = 2.75
+            if p < 1 / d { return n * p * p }
+            if p < 2 / d { let q = p - 1.5 / d; return n * q * q + 0.75 }
+            if p < 2.5 / d { let q = p - 2.25 / d; return n * q * q + 0.9375 }
+            let q = p - 2.625 / d; return n * q * q + 0.984375
+        }
+    }
+
+    // The panel's height, animated.
+    func animate(to target: CGFloat, duration: Double, curve: Curve, done: (() -> Void)? = nil) {
+        let start = win.frame.height - overlap
+        run(duration, { [weak self] p in
+            guard let self else { return }
+            self.win.setFrame(self.rect(height: max(0, start + (target - start) * CGFloat(Self.ease(curve, p)))), display: true)
+            self.updateMask()
+        }, done: done)
     }
 
     // ~/.config/notch-fight/sessions/<id> holds the PID of each working Claude session (written by
@@ -583,7 +714,7 @@ final class App: NSObject, NSApplicationDelegate {
         if preview { try? FileManager.default.removeItem(at: Self.previewFile); pokeOthers() }
         if phase != .shown { NSApp.terminate(nil); return }
         phase = .hiding
-        animate(to: 0, duration: 0.3, spring: false) { NSApp.terminate(nil) }
+        goUp { NSApp.terminate(nil) }
     }
 }
 
@@ -598,6 +729,7 @@ final class ClickView: NSView {
 if CommandLine.arguments.contains("--print-selection") {
     let p = App(), forced = p.planSelection()
     for n in forced { print("forced: \(n)") }
+    print("transition styles: \((["first"] + p.otherStyles()).joined(separator: ", "))")
     print("panel: \(p.allowed.isEmpty && forced.isEmpty ? "hidden (no clips active)" : "shown")")
     exit(0)
 }

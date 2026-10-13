@@ -1,5 +1,6 @@
 """src/build.py partial builds (ONLY=<theme|theme__clip>[,...]): only the named clips and their themes'
-transition halves (<theme>__out, <theme>__in) are rendered; everything else in build/ is left as it is.
+transition halves (<theme>__out, <theme>__in, and __out__<style> / __in__<style> for the other styles)
+are rendered; everything else in build/ is left as it is.
 Runs on a temporary copy of src/ with two tiny synthetic themes, so it takes seconds."""
 import os, shutil, subprocess, sys, tempfile, time, unittest
 
@@ -51,7 +52,20 @@ class PartialBuild(unittest.TestCase):
         self.assertEqual(sorted(self.built()), ['ta__one', 'tb__two'])
         for d in ('ta__out', 'ta__in', 'tb__out', 'tb__in'):            # two halves per theme, none per pair
             self.assertTrue(os.path.isdir(os.path.join(self.out, 'transitions', d)), d)
-        self.assertEqual(sorted(os.listdir(os.path.join(self.out, 'transitions'))), ['ta__in', 'ta__out', 'tb__in', 'tb__out'])
+        styles = ['', '__crt', '__dissolve', '__wipe']                  # the first style (iris) has no suffix
+        self.assertEqual(sorted(os.listdir(os.path.join(self.out, 'transitions'))),
+                         sorted(f'{t}__{h}{s}' for t in ('ta', 'tb') for h in ('in', 'out') for s in styles))
+
+    def test_a_theme_with_its_own_transition_has_only_that(self):
+        path = os.path.join(self.src, 'themes', 'tc.py'); add_theme(self.src, 'tc', 'three')
+        open(path, 'a').write("TRANSITION = 'curtain'\n")
+        r = build(self.src, self.out, 'tc'); self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(sorted(d for d in os.listdir(os.path.join(self.out, 'transitions')) if d.startswith('tc__')), ['tc__in', 'tc__out'])
+
+    def test_clips_have_a_glow_colour_per_frame(self):
+        lines = open(os.path.join(self.out, 'clips', 'ta__one', 'glow')).read().split()
+        self.assertEqual(len(lines), 4)
+        self.assertTrue(all(len(l) == 6 and int(l, 16) >= 0 for l in lines))
 
     def test_only_a_theme_rebuilds_just_it_and_its_transitions(self):
         before = mtimes(self.out); time.sleep(0.05)
@@ -89,7 +103,8 @@ class PartialBuild(unittest.TestCase):
         for top, n in (('clips', 4), ('transitions', 11)):               # the synthetic clips are 4 frames
             for dd in os.listdir(os.path.join(self.out, top)):
                 d = os.path.join(self.out, top, dd)
-                self.assertEqual(sorted(f for f in os.listdir(d) if not f.startswith('.')), ['count', 'frames.png'], dd)
+                want = ['count', 'frames.png'] + (['glow'] if top == 'clips' else [])
+                self.assertEqual(sorted(f for f in os.listdir(d) if not f.startswith('.')), want, dd)
                 self.assertEqual(int(open(os.path.join(d, 'count')).read()), n, dd)
                 sheet = Image.open(os.path.join(d, 'frames.png'))
                 self.assertEqual(sheet.size, (185 * min(10, n), 64 * ((n + 9) // 10)), dd)

@@ -100,6 +100,18 @@ class CommandLine(unittest.TestCase):
     def test_pause_needs_a_time_when_not_in_a_terminal(self):
         d = tempfile.mkdtemp(); path = os.path.join(d, 'config.json')
         r = self.run_nf(path, 'pause'); self.assertEqual(r.returncode, 1); self.assertIn('how long', r.stderr)
+    def test_settings_never_kill_a_resident_app(self):
+        """quiet / share used to `pkill` the app to hide it; a resident app only gets SIGUSR1 (look again).
+        pkill is stubbed: it records its arguments instead (a real one would reach the real app)."""
+        d = tempfile.mkdtemp(); path = os.path.join(d, 'config.json'); calls = os.path.join(d, 'calls')
+        stubs = os.path.join(d, 'stubs'); os.makedirs(stubs)
+        open(os.path.join(stubs, 'pkill'), 'w').write(f'#!/bin/sh\necho "$@" >> {calls}\n'); os.chmod(os.path.join(stubs, 'pkill'), 0o755)
+        env = dict(os.environ, NOTCH_FIGHT_CONFIG=path, PATH=stubs + os.pathsep + os.environ['PATH'])
+        for args in (('quiet', '00:00-23:59'), ('share', 'hide'), ('quiet', 'off')):
+            subprocess.run([os.path.join(ROOT, 'nf'), *args], env=env, capture_output=True, stdin=subprocess.DEVNULL)
+        sent = open(calls).read().splitlines() if os.path.exists(calls) else []
+        self.assertTrue(sent)
+        self.assertTrue(all(l.startswith('-USR1') for l in sent), sent)
     def test_unknown_commands_fail(self):
         self.assertEqual(self.run_nf(os.path.join(tempfile.mkdtemp(), 'c.json'), 'frobnicate').returncode, 2)
 

@@ -7,6 +7,7 @@ smoke, laughing; the screen is gone, the house in flames."""
 from engine import *
 
 THEME = 'basterds-cinema'
+TRANSITION = 'curtain'                                           # in and out of the cinema: the stage curtain
 N_ = 384                                                            # a multiple of 12
 INK = (20,16,12)
 register_bg(THEME, lambda v: (v+40,v+10,v+10))                      # every frame is drawn whole
