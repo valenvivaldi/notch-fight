@@ -53,6 +53,7 @@ hxh__jajanken 898a05329a7e8e47
 inv__train 412cafd2ceffc99f
 jakelong__dragon c9bbdefa7bc95a8e
 jjk-maki__zenin 0a5882ab4212d586
+jjk-megumi__mahoraga 1de7cf81b242d466
 jjk-sukuna__domain 392ed3d8f1a28d4b
 jjk-toji__sakahoko 5e635ea3f23b0c06
 jjk__infinity f1f04d889afcfba3
