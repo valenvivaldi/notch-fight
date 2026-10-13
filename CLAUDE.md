@@ -21,13 +21,35 @@
   Code"): `claude --plugin-dir <repo>/mod`. Pixel-perfect only in kitty/Ghostty; elsewhere (Orca included) it draws cells: suggest `display: octant` + `rows: 16` with a font that has the octants (Cascadia Mono 2404.23+), else `sextant` (README "Inside Claude Code").
 
 ## Adding content ("add a One Piece fight", "add a clip to DBZ")
-- New theme = new file `src/themes/<id>.py` (see README "Adding a clip"); new clip in an existing
-  theme = new `clip_<name>` + entry in that file's `CLIPS`.
+- New theme = new file `src/themes/<id>.py`, started with `nf new-theme` (see README "Adding a clip"); new
+  clip in an existing theme = new `clip_<name>` + entry in that file's `CLIPS`. Hand both to the
+  `theme-maker` agent (see "Who does what" below) and review what it brings.
 - Then `ONLY=<theme> GIFS=1 ./build.sh` (only that theme, its transitions and its GIF, on top of the
   last build; a plain `./build.sh` rebuilds everything), look at `build/sheet_<theme>_<clip>.png` to
   check the frames, and commit the source + `media/clips/<theme>__*.gif`.
 - If the clip is niche (a football club, a brand, an in-joke), ask whether it should ship off by default:
   `DEFAULT_OFF = True` in the theme, or `clip(..., off=True)` for one clip (README "Adding a clip").
+
+## Who does what (models)
+Cheap models do the volume, the main session decides and reviews. Delegate with the project agents in
+`.claude/agents/`, which pin their model:
+- **New themes and clips** from an idea → `theme-maker` (Haiku 5.5). A whole theme costs well under a
+  dollar. Several ideas → several theme-makers in parallel, one worktree each.
+- **Refactors across themes** (onto engine code, pixel-identical) and **scripts with a clear spec** →
+  `theme-refactor` (Sonnet 5.5).
+- **The main session** (whatever model it runs): designing an engine API or the toolkit, the Swift app,
+  anything that needs judgment across the codebase; and **reviewing and integrating** what the agents bring.
+
+Each agent works in its own worktree: `git worktree add -b <branch> ../nf-wt-<name> HEAD` (the Agent tool's
+`isolation: "worktree"` only works when the session was started inside this repo). Integrating:
+- read the report, then look yourself: `nf check <theme>`, and `python3 scripts/sheet.py <theme> <clip>
+  [frames]` for the beats it calls weak; send it back with specific fixes if a beat doesn't read;
+- `git cherry-pick` its commit, then `python3 tests/test_snapshots.py --update` (a new theme: only "N new";
+  a refactor: nothing may change), `FIRST=<theme>__<clip> ONLY=<theme> GIFS=1 ./build.sh`, and commit the
+  snapshot and the GIF; remove the worktree and its branch.
+
+Long sessions cost mostly in re-read context, not in the model: start a fresh session for each new batch
+of work rather than piling everything into one.
 
 ## Rules
 

@@ -28,6 +28,7 @@ dbz-freezer__namek 32703dc577689b01
 dbz-jiren__ultra 83ea05508fd0654d
 dbz__cellgames eb23eb4baf5b4b90
 deadpool__bub 269dc4c895da8c08
+deadpool__byebyebye 1654404bc58b2a93
 deadpool__notchverse dfa2b175e2b70f37
 deadpool__review 7b79bb3b7482e00e
 deadpool__webcam 25f55acefd9893e3
@@ -85,8 +86,10 @@ portal__triumph 4f77309a6dc45b5b
 ppg__townsville 15d9fb37f3861d9a
 predator__hunt 134bee91a2b98ad4
 pvz__lastwave 04b9a46d4f95abee
+rdr2__sunrise aa09e935f876731e
 rm__schwifty 5088021af9eaddf0
 samuraijack__aku 929d4ad2a1023cd2
+scarface__littlefriend 8e5335269d51fcca
 sf__hadouken 04b97de9cc9e9300
 simpsons__meltdown 58b2d7dd6fc12a4e
 simuladores__operativo 0c775c8c65a4588e
