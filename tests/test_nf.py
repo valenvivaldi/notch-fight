@@ -76,6 +76,30 @@ class Sharing(Temp):
     def test_it_can_be_turned_off(self):
         self.assertIsNone(nf.sharing({'shareProcesses': ['no-such-process-here']}))
 
+class Stats(Temp):
+    def setUp(self):
+        super().setUp(); self.saved_state = nf.STATE; nf.STATE = os.path.join(nf.STATE_DIR, 'state.json')
+    def tearDown(self): nf.STATE = self.saved_state; super().tearDown()
+    def state(self):
+        return {'rotation': {'played': ['a__x', 'b__y'], 'lastClip': 'b__y'},
+                'stats': {'plays': {'a__x': 3, 'a__z': 2, 'b__y': 1},
+                          'shown': {'2026-10-07': 125, '2026-10-02': 3600, '2026-09-01': 60},
+                          'waits': {'2026-10-07': 2, '2026-09-30': 1}}}
+    def test_the_summary(self):
+        sm = nf.stats_summary(self.state(), today=datetime.date(2026, 10, 7))
+        self.assertEqual(sm['shown'], (125, 3725, 3785))
+        self.assertEqual(sm['waits'], (2, 2, 3))                         # Sep 30 is 8 days back: not this week
+        self.assertEqual((sm['plays'], sm['clips'], sm['round']), (6, 3, 2))
+        self.assertEqual(sm['top_themes'][0], ('a', 5))
+        lines = nf.stats_lines(sm)
+        self.assertIn('Panel up: 2 min today, 1 h 02 min this week, 1 h 03 min in all', lines)
+    def test_reset_keeps_the_rotation(self):
+        json.dump(self.state(), open(nf.STATE, 'w'))
+        nf.cmd_stats(['reset'])
+        self.assertEqual(json.load(open(nf.STATE)), {'rotation': self.state()['rotation']})
+    def test_nothing_yet(self):
+        self.assertEqual(nf.stats_summary({})['plays'], 0)
+
 class CommandLine(unittest.TestCase):
     def run_nf(self, cfg_path, *args):
         env = dict(os.environ, NOTCH_FIGHT_CONFIG=cfg_path)

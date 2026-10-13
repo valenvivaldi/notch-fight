@@ -10,6 +10,9 @@ in "enabled" mode they go in an "enabled" list next to "disabled".
     ./clips.sh enable  <clip|theme>...
     ./clips.sh disable <clip|theme>...
     ./clips.sh mode enabled|disabled   what happens to NEW clips (the current selection is kept)
+    ./clips.sh only <clip|theme>...    just these, nothing else
+    ./clips.sh all on|off              every clip (also the ones shipped off), or none
+    ./clips.sh defaults                back to what ships on (the mode is kept)
 
 Names are clip folders under build/clips (<theme>__<clip>); a theme name means all its clips.
 Clips forced with "first" still play once at launch. NOTCH_FIGHT_CONFIG overrides the config path
@@ -198,6 +201,22 @@ def main(argv):
             on = on | names if cmd == 'enable' else on - names
             save(CONFIG, *updates(cfg, clips, on, mode_of(cfg), off))
             print(f"{cmd}d: {', '.join(sorted(names))}"); return 0
+        if cmd == 'only' and args:
+            names = set(expand(args, clips))
+            save(CONFIG, *updates(cfg, clips, names, mode_of(cfg), off))
+            print(f"only: {', '.join(sorted({theme_of(c) for c in names}))}"); return 0
+        if cmd == 'all' and args in (['on'], ['off']):
+            save(CONFIG, *updates(cfg, clips, set(clips) if args[0] == 'on' else set(), mode_of(cfg), off))
+            print(f"all clips: {args[0]}"); return 0
+        if cmd == 'defaults' and not args:
+            save(CONFIG, *updates(cfg, clips, set(clips) - set(off), mode_of(cfg), off))
+            print('back to the clips that ship on'); return 0
+        if cmd == 'themes' and not args:                     # for the menu: <theme> on|off|some, one per line
+            on = active(cfg, clips, off)
+            for t in sorted({theme_of(c) for c in clips}):
+                mine = [c for c in clips if theme_of(c) == t]; n = sum(c in on for c in mine)
+                print(f"{t}\t{'on' if n == len(mine) else 'off' if n == 0 else 'some'}")
+            return 0
         if cmd == 'mode' and len(args) == 1 and args[0] in MODES:
             save(CONFIG, *updates(cfg, clips, active(cfg, clips, off), args[0], off))
             print(f'new clips: {args[0]} (the current selection is kept)'); return 0

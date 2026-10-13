@@ -100,6 +100,20 @@ class Install(unittest.TestCase):
         subprocess.run([sys.executable, os.path.join(ROOT, 'scripts', 'hooks.py'), 'uninstall'], env=env, check=True, capture_output=True)
         self.assertEqual(json.load(open(path))['hooks'], {'PostToolUse': [{'matcher': 'Bash', 'hooks': [{'type': 'command', 'command': 'mine'}]}]})
 
+class HookState(unittest.TestCase):
+    """nf status tells per profile whether our hooks are current, old (no waiting alert), or another copy's."""
+    def profile(self, cmds):
+        d = tempfile.mkdtemp()
+        json.dump({'hooks': {'X': [{'hooks': [{'type': 'command', 'command': c} for c in cmds]}]}}, open(os.path.join(d, 'settings.json'), 'w'))
+        return d
+    def test_states(self):
+        mine = os.path.join(ROOT, 'scripts', 'notch-hook.sh')
+        self.assertIsNone(nf.hook_state(self.profile(['echo hi'])))
+        self.assertIsNone(nf.hook_state(tempfile.mkdtemp()))
+        self.assertEqual(nf.hook_state(self.profile([f'{mine} start /a.app', f'{mine} stop'])), 'old: run ./install.sh')
+        self.assertEqual(nf.hook_state(self.profile([f'{mine} start /a.app', f'{mine} work'])), 'current')
+        self.assertTrue(nf.hook_state(self.profile(['/elsewhere/nf/scripts/notch-hook.sh stop'])).startswith('another copy: /elsewhere/nf'))
+
 class Overlays(unittest.TestCase):
     def test_the_alert_loops(self):
         self.assertEqual(overlays.wait_frame(0).tobytes(), overlays.wait_frame(overlays.WAIT_N).tobytes())

@@ -143,7 +143,7 @@ final class App: NSObject, NSApplicationDelegate {
     func noteSessions(_ live: [Session]) {
         let waiting = Set(live.filter(\.waiting).map(\.name))
         let new = waiting.subtracting(waitingSeen)
-        if !new.isEmpty && !preview { for _ in new { state.countWait() }; state.save() }
+        if !new.isEmpty && !preview { state.update { s in for _ in new { s.countWait() } } }
         waitingSeen = waiting
         if !waiting.isEmpty != waitingNow { alertIdx = 0; trace(waiting.isEmpty ? "alert off" : "alert on") }   // from its first frame
         if live.count != sessionCount { trace("sessions \(live.count)") }
@@ -498,8 +498,9 @@ final class App: NSObject, NSApplicationDelegate {
         allowed = preview ? [] : activeClips()
         remaining = allowed
         if !preview {                                                // carry on with the last launch's round
+            state.reload()
             let done = Set(state.played), left = allowed.filter { !done.contains($0) }
-            if left.isEmpty { state.played = [] } else { remaining = left }
+            if left.isEmpty { state.update { $0.played = [] } } else { remaining = left }
             lastPlayed = state.lastClip
         }
         var forced: [String] = [], left = Set(remaining)
@@ -536,7 +537,7 @@ final class App: NSObject, NSApplicationDelegate {
     // Stay in the current theme for up to maxPerVisit clips, then move to another theme;
     // always drawing from the clips not yet played this round.
     func pickNext() -> String? {
-        if remaining.isEmpty { remaining = allowed; state.played = [] }  // new round
+        if remaining.isEmpty { remaining = allowed; if !preview { state.update { $0.played = [] } } }   // new round
         if remaining.isEmpty { return nil }
         var pool = remaining.filter { $0 != lastPlayed }
         if pool.isEmpty { pool = remaining }
@@ -591,17 +592,21 @@ final class App: NSObject, NSApplicationDelegate {
     // played, because the panel closed first, stays in the round for the next launch).
     func started(_ name: String) {
         if preview { return }
-        if !state.played.contains(name) { state.played.append(name) }
-        state.lastClip = name
-        state.countPlay(name)
-        saveState()
+        state.update { s in
+            if !s.played.contains(name) { s.played.append(name) }
+            s.lastClip = name
+            s.countPlay(name)
+            self.noteShown(s)
+        }
     }
 
     func saveState() {
         if preview { return }
+        state.update { self.noteShown($0) }
+    }
+    func noteShown(_ s: State) {
         let secs = Int(Date().timeIntervalSince(shownSince))         // whole seconds; the rest waits for the next save
-        state.addShown(secs); shownSince += Double(secs)
-        state.save()
+        s.addShown(secs); shownSince += Double(secs)
     }
 
     func tick() {

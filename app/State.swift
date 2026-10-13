@@ -12,8 +12,17 @@ final class State {
 
     init(url: URL = Gate.stateDir.appendingPathComponent("state.json")) {
         self.url = url
+        json = [:]; reload()
+    }
+
+    /// Read the file again: the resident app keeps this object for days, and `nf stats reset` writes the
+    /// file meanwhile.
+    func reload() {
         json = (try? Data(contentsOf: url)).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
     }
+
+    /// A change made on what is on disk: read, change, write.
+    func update(_ change: (State) -> Void) { reload(); change(self); save() }
 
     private var rotation: [String: Any] {
         get { json["rotation"] as? [String: Any] ?? [:] }

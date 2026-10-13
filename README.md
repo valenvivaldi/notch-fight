@@ -210,7 +210,8 @@ nf quiet 22:00-08:00        # never show it in that window (add `weekdays` for M
 nf share hide|show          # while sharing the screen: hide the panel (default) or keep showing it
 nf delay 10s                # only show it once Claude has worked that long (quick answers stay quiet; `off`)
 nf click next               # a click skips to the next clip, a double click closes it (`close`: the default)
-nf menu on                  # a menu bar icon with all of the above (and "Choose clips…"); starts at login; `off`
+nf menu on                  # a menu bar icon with all of the above, the themes and the stats; starts at login; `off`
+nf stats                    # panel time, how often Claude waited for you, the most played (`reset`: back to zero)
 nf resident on|off          # keep the app up, hidden, between prompts (the default; `on` adds login) or not
 ```
 
@@ -224,14 +225,20 @@ keeps it answering exactly like `nf gate`.
 
 The rotation outlives the app: `~/.config/notch-fight/state.json` keeps the clips already played this
 round, so the next launch carries on with it instead of starting over, and no clip repeats until all have
-played. It also counts plays per clip and the time the panel was up each day.
+played. It also counts plays per clip, the time the panel was up each day and the times Claude waited for
+you: `nf stats` and the menu's Stats show them (`nf stats reset` zeroes them and keeps the round; the app
+reads the file before each change, so a reset holds).
 
 With a delay, the panel shows only once a session has been working that long: the resident app times it
 from the date of the session's marker (written on each prompt); not resident, the hook hands the prompt
 to a detached sleeper. `nf preview` plays in a second copy of the app; the resident one steps aside
 while it runs (the preview leaves its PID in `~/.config/notch-fight/.preview` and pokes it). The menu bar icon is a
 separate tiny app (`build/NotchFightMenu.app`, a LaunchAgent once on): a sparkle when the panel may
-show, a pause sign when it is hidden, and every item just runs `nf`.
+show, a pause sign when it is hidden, and every item just runs `nf`. Its **Themes** submenu has a check
+per theme (a dash when only some of its clips are on) to turn it on or off, the themes of one franchise
+(`dbz`, `dbz-buu`, ...) in a submenu of their own, everything split alphabetically into a few groups;
+plus all on, all off, back to the defaults and only the Argentine ones. **Preview** is grouped the same
+way, and **Stats** shows the numbers. `NotchFightMenu --print-menu` prints the menu as a tree (tests).
 
 Screen sharing is detected by process: Zoom runs `CptHost` while sharing and macOS runs
 `screencaptureui` while recording. A share from a browser tab (Meet, Teams on the web) looks like any
@@ -246,6 +253,9 @@ other tab from outside, so it isn't caught: list your own process names in `"sha
 ./clips.sh disable jjk-sukuna       # a clip (<theme>__<clip>) or a whole theme
 ./clips.sh enable sw__father
 ./clips.sh mode disabled           # what happens to NEW clips; the current selection is kept
+./clips.sh only arg arg-86         # just these themes (or clips)
+./clips.sh all on                  # everything, also what ships off; `all off`: nothing
+./clips.sh defaults                # back to what ships on
 ```
 
 Two modes, stored in `~/.config/notch-fight/config.json` (`install.sh` offers the checklist too):
